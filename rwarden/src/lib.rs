@@ -159,15 +159,15 @@ impl Client {
             kdf_type,
             kdf_iterations,
         } = self.prelogin(&data.username).await?;
-        let master_key =
-            crypto::make_master_key(&data.username, &data.password, kdf_type, kdf_iterations);
+        let source_key =
+            crypto::SourceKey::new(&data.username, &data.password, kdf_type, kdf_iterations);
         let master_password_hash =
-            crypto::make_master_password_hash(&master_key, &data.password, kdf_type);
+            crypto::MasterPasswordHash::new(&source_key, &data.password, kdf_type);
 
         let mut req = HashMap::new();
         req.insert("grant_type", "password");
         req.insert("username", &data.username);
-        let master_password_hash = base64::encode(master_password_hash);
+        let master_password_hash = master_password_hash.encode();
         req.insert("password", &master_password_hash);
         req.insert("client_id", &data.client_id);
         req.insert("scope", "api offline_access");
@@ -201,7 +201,7 @@ impl Client {
             .await?
             .parse::<Token>()
             .await?;
-        let keys = crypto::Keys::derive(&master_key, &token.key)?;
+        let keys = crypto::Keys::new(&source_key, &token.key)?;
         Ok(Session {
             client: self.clone(),
             token_expiry_time: get_token_expiry_time(token.expires_in),
@@ -214,15 +214,15 @@ impl Client {
     pub async fn register(&self, data: &RegisterData) -> Result<()> {
         let kdf_iterations = data.kdf_iterations.unwrap_or(100_000);
         let kdf_type = data.kdf_type.unwrap_or(crypto::KdfType::Pbkdf2Sha256);
-        let master_key =
-            crypto::make_master_key(&data.username, &data.password, kdf_type, kdf_iterations);
+        let source_key =
+            crypto::SourceKey::new(&data.username, &data.password, kdf_type, kdf_iterations);
         let master_password_hash =
-            crypto::make_master_password_hash(&master_key, &data.password, kdf_type);
-        let protected_symmetric_key = crypto::make_protected_symmetric_key(&master_key);
+            crypto::MasterPasswordHash::new(&source_key, &data.password, kdf_type);
+        let protected_symmetric_key = crypto::generate_protected_symmetric_key(&source_key);
 
         let req = json!({
             "Email": data.username,
-            "MasterPasswordHash": base64::encode(master_password_hash),
+            "MasterPasswordHash": master_password_hash.encode(),
             "MasterPasswordHint": data.password_hint,
             "Key": protected_symmetric_key.to_string(),
             "Name": data.name,
