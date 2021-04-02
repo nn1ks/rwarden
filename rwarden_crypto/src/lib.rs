@@ -17,8 +17,8 @@ use thiserror::Error;
 /// Error that can occur while parsing a cipher string.
 #[derive(Debug, Display, Error)]
 pub enum CipherParseError {
-    /// Type is not supported.
-    UnsupportedType,
+    /// Encryption type is not supported.
+    UnsupportedEncryptionType,
     /// IV not found.
     IvNotFound,
     /// Ciphertext not found.
@@ -74,7 +74,7 @@ impl CipherString {
             .unwrap_or_else(|| value.chars().count());
         let ty = value[0..ty_end].parse::<usize>()?;
         if ty != 2 {
-            return Err(CipherParseError::UnsupportedType);
+            return Err(CipherParseError::UnsupportedEncryptionType);
         }
         let mut parts = chars.as_str().split('|');
         let iv = parts.next().ok_or(CipherParseError::IvNotFound)?;
