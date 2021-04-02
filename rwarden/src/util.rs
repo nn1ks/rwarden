@@ -1,11 +1,20 @@
 use crate::ResponseError;
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
 macro_rules! path {
     ($($e:expr),*) => {
         vec![$(format!("{}", $e)),*]
     };
+}
+
+pub fn deserialize_optional<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    let value: Option<T> = Deserialize::deserialize(deserializer)?;
+    Ok(value.unwrap_or_default())
 }
 
 #[async_trait]

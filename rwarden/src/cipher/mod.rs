@@ -2,7 +2,9 @@
 
 #![allow(clippy::needless_update)] // The `Setters` derive macro causes this clippy warning
 
-use crate::{BulkRestorable, CipherString, Getable, GetableAll, ResponseExt, Restorable, Session};
+use crate::{
+    util, BulkRestorable, CipherString, Getable, GetableAll, ResponseExt, Restorable, Session,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use derive_setters::Setters;
@@ -228,7 +230,8 @@ pub struct Login {
     /// The authenticator key for the time-based one-time password.
     pub totp: Option<CipherString>,
     /// The URIs of the login cipher.
-    pub uris: Vec<LoginUri>, // TODO: Test whether this can be `null` (and add `#[serde(default)]` if that is the case)
+    #[serde(deserialize_with = "util::deserialize_optional")]
+    pub uris: Vec<LoginUri>,
     /// The revision date of the login cipher.
     pub password_revision_date: Option<DateTime<FixedOffset>>,
 }
@@ -338,9 +341,12 @@ pub struct Cipher {
     #[serde(flatten)]
     pub ty: Type,
     pub notes: Option<String>,
+    #[serde(deserialize_with = "util::deserialize_optional")]
     pub fields: Vec<Field>,
+    #[serde(deserialize_with = "util::deserialize_optional")]
     pub attachments: Vec<Attachment>,
     pub organization_use_totp: bool,
+    #[serde(deserialize_with = "util::deserialize_optional")]
     pub password_history: Vec<PasswordHistoryEntry>,
     pub revision_date: DateTime<FixedOffset>,
     pub deletion_date: Option<DateTime<FixedOffset>>,
@@ -406,6 +412,7 @@ impl BulkRestorable for Cipher {
 pub struct CipherDetails {
     #[serde(flatten)]
     pub inner: Cipher,
+    #[serde(deserialize_with = "util::deserialize_optional")]
     pub collection_ids: Vec<Uuid>,
 }
 
