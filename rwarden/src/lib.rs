@@ -16,15 +16,13 @@ use url::Url;
 use util::ResponseExt;
 use uuid::Uuid;
 
-pub use response::Error as ResponseError;
 pub use rwarden_crypto as crypto;
 
 #[macro_use]
 mod util;
 
-mod response;
-
 pub mod cipher;
+pub mod response;
 
 /// Type alias for `Result<T, Error>`.
 pub type Result<T> = StdResult<T, Error>;
@@ -81,7 +79,7 @@ impl Urls {
     /// [`auth`]: Self::auth
     pub fn unofficial(url: Url) -> StdResult<Self, url::ParseError> {
         Ok(Self {
-            base: url.join("api/")?,
+            base: url.join("api")?,
             auth: url.join("identity/connect/token")?,
         })
     }
@@ -225,7 +223,12 @@ impl Client {
             "KdfIterations": data.kdf_iterations,
         });
 
-        self.request_auth()?.form(&req).send().await?.parse().await
+        self.request(Method::POST, |urls| &urls.base, &["accounts", "register"])?
+            .json(&req)
+            .send()
+            .await?
+            .parse()
+            .await
     }
 }
 

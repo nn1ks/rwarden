@@ -1,87 +1,77 @@
-use serde::de::{self, MapAccess, Visitor};
+//! Module for responses returned from the Bitwarden API.
+
 use serde::{Deserialize, Deserializer};
-use std::{collections::HashMap, fmt};
-use thiserror::Error as ThisError;
+use std::collections::HashMap;
+use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ErrorType {
-    InvalidGrant,
+/// An error returned from the Bitwarden API.
+#[derive(Debug, Clone, PartialEq, Eq, Error, Deserialize)]
+#[serde(untagged)]
+pub enum Error {
+    /// Two factor authentication is required.
+    #[error("Two factor authentication is required")]
+    TwoFactorRequired {
+        #[serde(rename = "TwoFactorProviders2")]
+        two_factor_providers: HashMap<i32, ErrorTwoFactorProvider>,
+    },
+    /// An unknown error occurred.
+    #[error("Unknown error: {}", .message)]
+    #[serde(deserialize_with = "deserialize_unknown_error")]
+    Other {
+        message: String,
+        validation_errors: HashMap<String, Vec<String>>,
+    },
 }
 
-/// An error that was returned by the Bitwarden API.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, ThisError)]
-pub struct Error {
-    ty: ErrorType,
-    description: String,
-    // TODO: Add more fields
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.description)
+#[allow(clippy::type_complexity)]
+fn deserialize_unknown_error<'de, D>(
+    deserializer: D,
+) -> Result<(String, HashMap<String, Vec<String>>), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct InnerErrorModel {
+        message: String,
     }
-}
-
-impl<'de> Deserialize<'de> for Error {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct ErrorVisitor;
-
-        impl<'de> Visitor<'de> for ErrorVisitor {
-            type Value = Error;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("struct Duration")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut ty = None;
-                let mut description = None;
-                let mut other_fields = HashMap::new();
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "error" => {
-                            if ty.is_some() {
-                                return Err(de::Error::duplicate_field("error"));
-                            }
-                            ty = Some(map.next_value()?);
-                        }
-                        "error_description" => {
-                            if description.is_some() {
-                                return Err(de::Error::duplicate_field("error_description"));
-                            }
-                            description = Some(map.next_value()?);
-                        }
-                        _ => {
-                            other_fields.insert(key, map.next_value()?);
-                        }
-                    }
-                }
-                let ty = ty.ok_or_else(|| de::Error::missing_field("error"))?;
-                let description =
-                    description.ok_or_else(|| de::Error::missing_field("error_description"))?;
-                Ok(Error { ty, description })
-            }
-        }
-
-        const FIELDS: &[&str] = &["error", "error_description"];
-        deserializer.deserialize_struct("Error", FIELDS, ErrorVisitor)
+    #[derive(Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct InnerError {
+        message: Option<String>,
+        validation_errors: Option<HashMap<String, Vec<String>>>,
+        error_model: Option<InnerErrorModel>,
     }
+    let inner = InnerError::deserialize(deserializer)?;
+    let message = match inner.error_model {
+        Some(v) if !v.message.is_empty() => v.message,
+        _ => inner.message.unwrap_or_default(),
+    };
+    Ok((message, inner.validation_errors.unwrap_or_default()))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct TwoFactor {
-    #[serde(rename = "TwoFactorProviders2")]
-    pub two_factor_providers: HashMap<String, TwoFactorProvider>,
-}
-
+/// Provider for two factor authentication.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
-pub enum TwoFactorProvider {
-    Email(String),
+#[serde(untagged)]
+pub enum ErrorTwoFactorProvider {
+    #[serde(rename_all = "PascalCase")]
+    Email { email: String },
+    #[serde(rename_all = "PascalCase")]
+    U2f {
+        challenges: Vec<ErrorTwoFactorProviderU2fChallenge>,
+    },
+    #[serde(rename_all = "PascalCase")]
+    Duo { host: String, signature: String },
+    #[serde(rename_all = "PascalCase")]
+    Yubikey { nfc: bool },
+}
+
+/// Challenge of U2f two factor authentication.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorTwoFactorProviderU2fChallenge {
+    pub app_id: String,
+    pub challenge: String,
+    pub version: String,
+    pub key_handle: Option<String>,
 }

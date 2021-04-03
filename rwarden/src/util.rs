@@ -1,4 +1,4 @@
-use crate::ResponseError;
+use crate::response;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
@@ -28,7 +28,7 @@ impl ResponseExt for reqwest::Response {
         if self.status().is_success() {
             Ok(self.json().await?)
         } else {
-            let e = self.json::<ResponseError>().await?;
+            let e = self.json::<response::Error>().await?;
             return Err(e.into());
         }
     }
