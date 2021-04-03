@@ -191,7 +191,7 @@ impl Client {
             .form(&req)
             .send()
             .await?
-            .parse::<Token>()
+            .parse::<TokenResponse>()
             .await?;
         let keys = crypto::Keys::new(&source_key, &token.key)?;
         Ok(Session {
@@ -315,7 +315,7 @@ impl Session {
             .json(&req)
             .send()
             .await?
-            .parse::<Token>()
+            .parse::<TokenResponse>()
             .await?;
         self.tokens.refresh_token = token.refresh_token;
         self.tokens.access_token = token.access_token;
@@ -418,17 +418,17 @@ impl Session {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
-struct Token {
+#[derive(Debug, Deserialize)]
+struct TokenResponse {
     access_token: String,
     expires_in: Option<i64>,
     token_type: String,
     refresh_token: String,
     scope: String,
     #[serde(rename = "Key")]
-    key: CipherString, // TODO: Check if this is always returned (and never null)
+    key: CipherString,
     #[serde(rename = "PrivateKey")]
-    private_key: Option<CipherString>, // TODO: Check if this is always returned (and never null)
+    private_key: Option<CipherString>,
     #[serde(rename = "Kdf")]
     kdf_type: crypto::KdfType,
     #[serde(rename = "KdfIterations")]
