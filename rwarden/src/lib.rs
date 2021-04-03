@@ -110,14 +110,6 @@ impl Client {
         }
     }
 
-    pub fn official() -> Self {
-        Self::new(Urls::official())
-    }
-
-    pub fn unofficial(url: Url) -> StdResult<Self, url::ParseError> {
-        Ok(Self::new(Urls::unofficial(url)?))
-    }
-
     pub fn urls(&self) -> &Urls {
         &self.urls
     }
