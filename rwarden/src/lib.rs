@@ -204,10 +204,12 @@ impl Client {
         let keys = crypto::Keys::new(&source_key, &token.key)?;
         Ok(Session {
             client: self.clone(),
-            token_expiry_time: get_token_expiry_time(token.expires_in),
-            refresh_token: token.refresh_token,
-            access_token: Some(token.access_token),
             keys,
+            token_expiry_time: get_token_expiry_time(token.expires_in),
+            tokens: Tokens {
+                refresh_token: token.refresh_token,
+                access_token: token.access_token,
+            },
         })
     }
 
@@ -242,25 +244,30 @@ fn get_token_expiry_time(expires_in: Option<i64>) -> SystemTime {
             .unwrap_or_default()
 }
 
+/// Tokens used for accessing the Bitwarden API.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Tokens {
+    pub refresh_token: String,
+    pub access_token: String,
+}
+
 /// A session used for interacting with the Bitwarden API.
 #[derive(Debug, Clone)]
 pub struct Session {
     client: Client,
     keys: Keys,
     token_expiry_time: SystemTime,
-    refresh_token: String,
-    access_token: Option<String>,
+    tokens: Tokens,
 }
 
 impl Session {
     /// Creates a new [`Session`].
-    pub fn new(urls: Urls, keys: Keys, refresh_token: String) -> Self {
+    pub fn new(urls: Urls, keys: Keys, tokens: Tokens) -> Self {
         Self {
             client: Client::new(urls),
-            token_expiry_time: SystemTime::now(),
-            refresh_token,
-            access_token: None,
             keys,
+            token_expiry_time: SystemTime::now(),
+            tokens,
         }
     }
 
@@ -272,6 +279,11 @@ impl Session {
     /// Returns the keys.
     pub fn keys(&self) -> &Keys {
         &self.keys
+    }
+
+    /// Returns the tokens.
+    pub fn tokens(&self) -> &Tokens {
+        &self.tokens
     }
 
     /// Returns whether the token has expired.
@@ -290,21 +302,20 @@ impl Session {
         I: IntoIterator,
         I::Item: AsRef<str>,
     {
-        if self.access_token.is_none() || self.token_has_expired() {
+        if self.token_has_expired() {
             self.refresh_token().await?;
         }
-        let access_token = self.access_token.as_ref().unwrap();
-        Ok(self
-            .client
-            .request(method, urls, path_segments)?
-            .header(header::AUTHORIZATION, format!("Bearer {}", access_token)))
+        Ok(self.client.request(method, urls, path_segments)?.header(
+            header::AUTHORIZATION,
+            format!("Bearer {}", self.tokens.access_token),
+        ))
     }
 
     /// Refreshes the token.
     async fn refresh_token(&mut self) -> Result<()> {
         let req = json!({
             "grant_type": "refresh_token",
-            "refresh_token": self.refresh_token,
+            "refresh_token": self.tokens.refresh_token,
         });
         let token = self
             .client
@@ -314,8 +325,8 @@ impl Session {
             .await?
             .parse::<Token>()
             .await?;
-        self.refresh_token = token.refresh_token;
-        self.access_token = Some(token.access_token);
+        self.tokens.refresh_token = token.refresh_token;
+        self.tokens.access_token = token.access_token;
         self.token_expiry_time = get_token_expiry_time(token.expires_in);
         Ok(())
     }
