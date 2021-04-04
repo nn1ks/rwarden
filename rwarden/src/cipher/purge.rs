@@ -36,7 +36,7 @@ impl crate::Purger for Purger {
             .json(self)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }

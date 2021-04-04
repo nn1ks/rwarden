@@ -76,7 +76,7 @@ impl crate::BulkSharer for BulkSharer {
             .json(self)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }

@@ -34,7 +34,7 @@ impl crate::BulkMover for BulkMover {
             .json(&body)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }

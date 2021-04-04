@@ -43,7 +43,7 @@ impl crate::Importer for AccountImporter {
             .json(self)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }

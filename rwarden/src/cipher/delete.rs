@@ -32,7 +32,7 @@ impl crate::Deleter for Deleter {
             .await?
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }
@@ -93,7 +93,7 @@ impl crate::BulkDeleter for BulkDeleter {
             .json(&body)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }

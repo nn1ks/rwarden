@@ -227,7 +227,7 @@ impl Client {
             .json(&req)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }

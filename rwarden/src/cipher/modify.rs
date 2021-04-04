@@ -68,7 +68,7 @@ impl crate::Modifier for PartialModifier {
             .json(self)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }
@@ -102,7 +102,7 @@ impl crate::Modifier for CollectionModifier {
             .json(self)
             .send()
             .await?
-            .parse()
+            .parse_empty()
             .await
     }
 }
