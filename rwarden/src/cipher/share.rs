@@ -35,7 +35,7 @@ impl crate::Sharer for Sharer {
             .request(
                 Method::PUT,
                 |urls| &urls.base,
-                path!("ciphers", id, "share"),
+                format!("ciphers/{}/share", id),
             )
             .await?
             .json(self)
@@ -71,7 +71,7 @@ impl crate::BulkSharer for BulkSharer {
     type Response = ();
     async fn execute(&self, session: &mut Session) -> Result<Self::Response> {
         session
-            .request(Method::PUT, |urls| &urls.base, path!("ciphers", "share"))
+            .request(Method::PUT, |urls| &urls.base, "ciphers/share")
             .await?
             .json(self)
             .send()

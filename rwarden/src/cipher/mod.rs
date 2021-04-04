@@ -360,7 +360,7 @@ impl Getable for Cipher {
     type Id = Uuid;
     async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
-            .request(Method::GET, |urls| &urls.base, path!("ciphers", id))
+            .request(Method::GET, |urls| &urls.base, format!("ciphers/{}", id))
             .await?
             .send()
             .await?
@@ -377,7 +377,7 @@ impl Restorable for Cipher {
             .request(
                 Method::GET,
                 |urls| &urls.base,
-                path!("ciphers", id, "restore"),
+                format!("ciphers/{}/restore", id),
             )
             .await?
             .send()
@@ -395,14 +395,20 @@ impl BulkRestorable for Cipher {
         I: IntoIterator<Item = Self::Id>,
     {
         let body = json!({ "ids": ids.into_iter().collect::<Vec<_>>() });
-        session
-            .request(Method::GET, |urls| &urls.base, path!("ciphers", "restore"))
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct Response {
+            data: Vec<Cipher>,
+        }
+        let response = session
+            .request(Method::GET, |urls| &urls.base, "ciphers/restore")
             .await?
             .json(&body)
             .send()
             .await?
-            .parse()
-            .await
+            .parse::<Response>()
+            .await?;
+        Ok(response.data)
     }
 }
 
@@ -424,7 +430,7 @@ impl Getable for CipherDetails {
             .request(
                 Method::GET,
                 |urls| &urls.base,
-                path!("ciphers", id, "details"),
+                format!("ciphers/{}/details", id),
             )
             .await?
             .send()
@@ -443,7 +449,7 @@ impl GetableAll for CipherDetails {
             data: Vec<CipherDetails>,
         }
         let response = session
-            .request(Method::GET, |urls| &urls.base, path!("ciphers"))
+            .request(Method::GET, |urls| &urls.base, "ciphers")
             .await?
             .send()
             .await?

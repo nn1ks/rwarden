@@ -23,9 +23,9 @@ impl crate::Deleter for Deleter {
     type Id = Uuid;
     async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<()> {
         let (method, path) = if self.soft_delete {
-            (Method::PUT, path!("ciphers", id, "delete"))
+            (Method::PUT, format!("ciphers/{}/delete", id))
         } else {
-            (Method::DELETE, path!("ciphers", id))
+            (Method::DELETE, format!("ciphers/{}", id))
         };
         session
             .request(method, |urls| &urls.base, path)
@@ -79,9 +79,9 @@ impl crate::BulkDeleter for BulkDeleter {
         I: IntoIterator<Item = Self::Id>,
     {
         let (method, path) = if self.soft_delete {
-            (Method::PUT, path!("ciphers", "delete"))
+            (Method::PUT, "ciphers/delete")
         } else {
-            (Method::DELETE, path!("ciphers"))
+            (Method::DELETE, "ciphers")
         };
         let body = json!({
             "Ids": ids.into_iter().collect::<Vec<_>>(),

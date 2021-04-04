@@ -2,12 +2,6 @@ use crate::response;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
-macro_rules! path {
-    ($($e:expr),*) => {
-        vec![$(format!("{}", $e)),*]
-    };
-}
-
 pub fn deserialize_optional<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,

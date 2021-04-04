@@ -27,8 +27,8 @@ impl crate::Creator for Creator {
     type Response = Cipher;
     async fn execute(&self, session: &mut Session) -> Result<Self::Response> {
         let path = match self.owner {
-            Owner::User => path!("ciphers"),
-            Owner::Organization { .. } => path!("ciphers", "create"),
+            Owner::User => "ciphers",
+            Owner::Organization { .. } => "ciphers/create",
         };
         session
             .request(Method::POST, |urls| &urls.base, path)

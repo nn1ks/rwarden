@@ -38,7 +38,7 @@ impl AccountImporter {
 impl crate::Importer for AccountImporter {
     async fn execute(&self, session: &mut Session) -> Result<()> {
         session
-            .request(Method::POST, |urls| &urls.base, path!("ciphers", "import"))
+            .request(Method::POST, |urls| &urls.base, "ciphers/import")
             .await?
             .json(self)
             .send()
@@ -110,7 +110,7 @@ impl crate::Importer for OrganizationImporter {
             .request(
                 Method::POST,
                 |urls| &urls.base,
-                &["ciphers", "import-organization"],
+                "ciphers/import-organization",
             )
             .await?
             .json(self)

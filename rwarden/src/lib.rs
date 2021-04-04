@@ -18,7 +18,6 @@ use uuid::Uuid;
 
 pub use rwarden_crypto as crypto;
 
-#[macro_use]
 mod util;
 
 pub mod cipher;
@@ -112,31 +111,27 @@ impl Client {
         &self.urls
     }
 
-    pub(crate) fn request<F, I>(
+    pub(crate) fn request<F, S>(
         &self,
         method: Method,
         url: F,
-        path_segments: I,
+        path: S,
     ) -> StdResult<RequestBuilder, url::ParseError>
     where
         F: Fn(&Urls) -> &Url,
-        I: IntoIterator,
-        I::Item: AsRef<str>,
+        S: AsRef<str>,
     {
-        let mut url = url(&self.urls).clone();
-        url.path_segments_mut()
-            .map_err(|_| url::ParseError::RelativeUrlWithCannotBeABaseBase)?
-            .extend(path_segments);
+        let url = url(&self.urls).join(path.as_ref())?;
         Ok(self.client.request(method, url))
     }
 
     pub(crate) fn request_auth(&self) -> StdResult<RequestBuilder, url::ParseError> {
-        self.request(Method::POST, |urls| &urls.auth, std::iter::empty::<&str>())
+        self.request(Method::POST, |urls| &urls.auth, "")
     }
 
     async fn prelogin(&self, username: &str) -> Result<Prelogin> {
         Ok(self
-            .request(Method::POST, |urls| &urls.base, &["accounts", "prelogin"])?
+            .request(Method::POST, |urls| &urls.base, "accounts/prelogin")?
             .json(&json!({ "email": username }))
             .send()
             .await?
@@ -223,7 +218,7 @@ impl Client {
             "KdfIterations": data.kdf_iterations,
         });
 
-        self.request(Method::POST, |urls| &urls.base, &["accounts", "register"])?
+        self.request(Method::POST, |urls| &urls.base, "accounts/register")?
             .json(&req)
             .send()
             .await?
@@ -286,21 +281,20 @@ impl Session {
         self.token_expiry_time <= SystemTime::now()
     }
 
-    pub(crate) async fn request<F, I>(
+    pub(crate) async fn request<F, S>(
         &mut self,
         method: Method,
         urls: F,
-        path_segments: I,
+        path: S,
     ) -> Result<RequestBuilder>
     where
         F: Fn(&Urls) -> &Url,
-        I: IntoIterator,
-        I::Item: AsRef<str>,
+        S: AsRef<str>,
     {
         if self.token_has_expired() {
             self.refresh_token().await?;
         }
-        Ok(self.client.request(method, urls, path_segments)?.header(
+        Ok(self.client.request(method, urls, path)?.header(
             header::AUTHORIZATION,
             format!("Bearer {}", self.tokens.access_token),
         ))
