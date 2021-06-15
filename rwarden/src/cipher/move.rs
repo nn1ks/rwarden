@@ -29,7 +29,7 @@ impl crate::BulkMover for BulkMover {
             "Ids": ids.into_iter().collect::<Vec<_>>(),
         });
         session
-            .request(Method::PUT, |urls| &urls.base, "ciphers/move")
+            .request_base(Method::PUT, "ciphers/move")
             .await?
             .json(&body)
             .send()

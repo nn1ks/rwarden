@@ -111,7 +111,7 @@ impl Client {
         &self.urls
     }
 
-    pub(crate) fn request<F, S>(
+    fn request<F, S>(
         &self,
         method: Method,
         url: F,
@@ -125,7 +125,7 @@ impl Client {
         Ok(self.client.request(method, url))
     }
 
-    pub(crate) fn request_auth(&self) -> StdResult<RequestBuilder, url::ParseError> {
+    fn request_auth(&self) -> StdResult<RequestBuilder, url::ParseError> {
         self.request(Method::POST, |urls| &urls.auth, "")
     }
 
@@ -281,7 +281,7 @@ impl Session {
         self.token_expiry_time <= SystemTime::now()
     }
 
-    pub(crate) async fn request<F, S>(
+    async fn request<F, S>(
         &mut self,
         method: Method,
         urls: F,
@@ -298,6 +298,17 @@ impl Session {
             header::AUTHORIZATION,
             format!("Bearer {}", self.tokens.access_token),
         ))
+    }
+
+    pub(crate) async fn request_base<S>(
+        &mut self,
+        method: Method,
+        path: S,
+    ) -> Result<RequestBuilder>
+    where
+        S: AsRef<str>,
+    {
+        self.request(method, |urls| &urls.base, path).await
     }
 
     /// Refreshes the token.

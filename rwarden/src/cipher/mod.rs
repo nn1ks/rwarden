@@ -360,7 +360,7 @@ impl Getable for Cipher {
     type Id = Uuid;
     async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
-            .request(Method::GET, |urls| &urls.base, format!("ciphers/{}", id))
+            .request_base(Method::GET, format!("ciphers/{}", id))
             .await?
             .send()
             .await?
@@ -374,11 +374,7 @@ impl Restorable for Cipher {
     type Id = Uuid;
     async fn restore(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
-            .request(
-                Method::GET,
-                |urls| &urls.base,
-                format!("ciphers/{}/restore", id),
-            )
+            .request_base(Method::GET, format!("ciphers/{}/restore", id))
             .await?
             .send()
             .await?
@@ -401,7 +397,7 @@ impl BulkRestorable for Cipher {
             data: Vec<Cipher>,
         }
         let response = session
-            .request(Method::GET, |urls| &urls.base, "ciphers/restore")
+            .request_base(Method::GET, "ciphers/restore")
             .await?
             .json(&body)
             .send()
@@ -427,11 +423,7 @@ impl Getable for CipherDetails {
     type Id = Uuid;
     async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
-            .request(
-                Method::GET,
-                |urls| &urls.base,
-                format!("ciphers/{}/details", id),
-            )
+            .request_base(Method::GET, format!("ciphers/{}/details", id))
             .await?
             .send()
             .await?
@@ -449,7 +441,7 @@ impl GetableAll for CipherDetails {
             data: Vec<CipherDetails>,
         }
         let response = session
-            .request(Method::GET, |urls| &urls.base, "ciphers")
+            .request_base(Method::GET, "ciphers")
             .await?
             .send()
             .await?

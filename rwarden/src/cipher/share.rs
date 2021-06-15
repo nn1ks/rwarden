@@ -32,11 +32,7 @@ impl crate::Sharer for Sharer {
     type Response = Cipher;
     async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<Self::Response> {
         session
-            .request(
-                Method::PUT,
-                |urls| &urls.base,
-                format!("ciphers/{}/share", id),
-            )
+            .request_base(Method::PUT, format!("ciphers/{}/share", id))
             .await?
             .json(self)
             .send()
@@ -71,7 +67,7 @@ impl crate::BulkSharer for BulkSharer {
     type Response = ();
     async fn execute(&self, session: &mut Session) -> Result<Self::Response> {
         session
-            .request(Method::PUT, |urls| &urls.base, "ciphers/share")
+            .request_base(Method::PUT, "ciphers/share")
             .await?
             .json(self)
             .send()

@@ -31,7 +31,7 @@ impl crate::Creator for Creator {
             Owner::Organization { .. } => "ciphers/create",
         };
         session
-            .request(Method::POST, |urls| &urls.base, path)
+            .request_base(Method::POST, path)
             .await?
             .json(self)
             .send()

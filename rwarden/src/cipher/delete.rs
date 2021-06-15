@@ -28,7 +28,7 @@ impl crate::Deleter for Deleter {
             (Method::DELETE, format!("ciphers/{}", id))
         };
         session
-            .request(method, |urls| &urls.base, path)
+            .request_base(method, path)
             .await?
             .send()
             .await?
@@ -88,7 +88,7 @@ impl crate::BulkDeleter for BulkDeleter {
             "OrganizationId": self.organization_id,
         });
         session
-            .request(method, |urls| &urls.base, path)
+            .request_base(method, path)
             .await?
             .json(&body)
             .send()

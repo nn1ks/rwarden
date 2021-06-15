@@ -30,7 +30,7 @@ impl Purger {
 impl crate::Purger for Purger {
     async fn execute(&self, session: &mut Session) -> Result<()> {
         session
-            .request(Method::POST, |urls| &urls.base, "ciphers/purge")
+            .request_base(Method::POST, "ciphers/purge")
             .await?
             .query(&[("organizationId", self.organization_id)])
             .json(self)

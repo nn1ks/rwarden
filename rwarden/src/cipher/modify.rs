@@ -27,7 +27,7 @@ impl crate::Modifier for Modifier {
     type Response = Cipher;
     async fn execute(&self, session: &mut Session, id: Self::Id) -> crate::Result<Self::Response> {
         session
-            .request(Method::PUT, |urls| &urls.base, format!("ciphers/{}", id))
+            .request_base(Method::PUT, format!("ciphers/{}", id))
             .await?
             .json(self)
             .send()
@@ -59,11 +59,7 @@ impl crate::Modifier for PartialModifier {
     type Response = ();
     async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<Self::Response> {
         session
-            .request(
-                Method::PUT,
-                |urls| &urls.base,
-                format!("ciphers/{}/partial", id),
-            )
+            .request_base(Method::PUT, format!("ciphers/{}/partial", id))
             .await?
             .json(self)
             .send()
@@ -93,11 +89,7 @@ impl crate::Modifier for CollectionModifier {
     type Response = ();
     async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<Self::Response> {
         session
-            .request(
-                Method::PUT,
-                |urls| &urls.base,
-                format!("ciphers/{}/collections", id),
-            )
+            .request_base(Method::PUT, format!("ciphers/{}/collections", id))
             .await?
             .json(self)
             .send()
