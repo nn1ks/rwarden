@@ -37,7 +37,7 @@ pub enum CipherParseError {
 }
 
 /// Error that can occur while decrypting a cipher string.
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Clone, Display, Error)]
 pub enum CipherDecryptionError {
     /// The verification of the mac key failed.
     MacVerification(#[from] crypto_mac::MacError),
@@ -46,7 +46,7 @@ pub enum CipherDecryptionError {
 }
 
 /// Error that can occur while decrypting a cipher string.
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum CipherDecryptionStringError {
     #[error(transparent)]
     Other(#[from] CipherDecryptionError),
