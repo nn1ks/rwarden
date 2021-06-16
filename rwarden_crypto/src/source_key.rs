@@ -12,9 +12,9 @@ pub struct SourceKey([u8; 32]);
 
 impl SourceKey {
     /// Creates a new [`SourceKey`].
-    pub fn new<U, P>(username: U, password: P, kdf_type: KdfType, kdf_iterations: u32) -> Self
+    pub fn new<E, P>(email: E, password: P, kdf_type: KdfType, kdf_iterations: u32) -> Self
     where
-        U: AsRef<[u8]>,
+        E: AsRef<[u8]>,
         P: AsRef<[u8]>,
     {
         match kdf_type {
@@ -22,7 +22,7 @@ impl SourceKey {
                 let mut source_key = [0; 32];
                 pbkdf2::<Hmac<Sha256>>(
                     password.as_ref(),
-                    username.as_ref(),
+                    email.as_ref(),
                     kdf_iterations,
                     &mut source_key,
                 );

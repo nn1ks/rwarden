@@ -129,10 +129,10 @@ impl Client {
         self.request(Method::POST, |urls| &urls.auth, "")
     }
 
-    async fn prelogin(&self, username: &str) -> Result<Prelogin> {
+    async fn prelogin(&self, email: &str) -> Result<Prelogin> {
         Ok(self
             .request(Method::POST, |urls| &urls.base, "accounts/prelogin")?
-            .json(&json!({ "email": username }))
+            .json(&json!({ "email": email }))
             .send()
             .await?
             .parse()
@@ -143,15 +143,15 @@ impl Client {
         let Prelogin {
             kdf_type,
             kdf_iterations,
-        } = self.prelogin(&data.username).await?;
+        } = self.prelogin(&data.email).await?;
         let source_key =
-            crypto::SourceKey::new(&data.username, &data.password, kdf_type, kdf_iterations);
+            crypto::SourceKey::new(&data.email, &data.password, kdf_type, kdf_iterations);
         let master_password_hash =
             crypto::MasterPasswordHash::new(&source_key, &data.password, kdf_type);
 
         let mut req = HashMap::new();
         req.insert("grant_type", "password");
-        req.insert("username", &data.username);
+        req.insert("username", &data.email);
         let master_password_hash = master_password_hash.encode();
         req.insert("password", &master_password_hash);
         req.insert("client_id", &data.client_id);
@@ -202,13 +202,13 @@ impl Client {
         let kdf_iterations = data.kdf_iterations.unwrap_or(100_000);
         let kdf_type = data.kdf_type.unwrap_or(crypto::KdfType::Pbkdf2Sha256);
         let source_key =
-            crypto::SourceKey::new(&data.username, &data.password, kdf_type, kdf_iterations);
+            crypto::SourceKey::new(&data.email, &data.password, kdf_type, kdf_iterations);
         let master_password_hash =
             crypto::MasterPasswordHash::new(&source_key, &data.password, kdf_type);
         let protected_symmetric_key = crypto::generate_protected_symmetric_key(&source_key);
 
         let req = json!({
-            "Email": data.username,
+            "Email": data.email,
             "MasterPasswordHash": master_password_hash.encode(),
             "MasterPasswordHint": data.password_hint,
             "Key": protected_symmetric_key.to_string(),
@@ -489,9 +489,9 @@ pub enum TwoFactorProvider {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Setters)]
 #[setters(strip_option, prefix = "with_")]
 pub struct LoginData {
-    /// The username. Usually this is the email address.
+    /// The email address.
     #[setters(skip)]
-    pub username: String,
+    pub email: String,
     /// The master password.
     #[setters(skip)]
     pub password: String,
@@ -511,15 +511,15 @@ pub struct LoginData {
 
 impl LoginData {
     /// Creates a new [`LoginData`].
-    pub fn new<U, P, C>(username: U, password: P, client_id: C) -> Self
+    pub fn new<E, P, C>(email: E, password: P, client_id: C) -> Self
     where
-        U: Into<String>,
+        E: Into<String>,
         P: Into<String>,
         C: Into<String>,
     {
         Self {
             client_id: client_id.into(),
-            username: username.into(),
+            email: email.into(),
             password: password.into(),
             device_name: None,
             device_type: None,
@@ -535,31 +535,37 @@ impl LoginData {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Setters)]
 #[setters(strip_option, prefix = "with_")]
 pub struct RegisterData {
-    /// The username. Usually this is the email address.
+    /// The email address.
     #[setters(skip)]
-    pub username: String,
+    pub email: String,
     /// The master password.
     #[setters(skip)]
     pub password: String,
     /// The hint for the master password.
     #[setters(into)]
     pub password_hint: Option<String>,
+    /// The name of the user.
     #[setters(into)]
     pub name: Option<String>,
+    /// The ID of an organization that the user will be part of.
     pub organization_user_id: Option<Uuid>,
+    /// The KDF type. Defaults to [`KdfType::Pbkdf2Sha256`].
+    ///
+    /// [`KdfType::Pbkdf2Sha256`]: crypto::KdfType::Pbkdf2Sha256
     pub kdf_type: Option<crypto::KdfType>,
+    /// The number of KDF iterations. Defaults to `100_000`.
     pub kdf_iterations: Option<u32>,
 }
 
 impl RegisterData {
     /// Creates a new [`RegisterData`].
-    pub fn new<E, P>(username: E, password: P) -> Self
+    pub fn new<E, P>(email: E, password: P) -> Self
     where
         E: Into<String>,
         P: Into<String>,
     {
         Self {
-            username: username.into(),
+            email: email.into(),
             password: password.into(),
             password_hint: None,
             name: None,
