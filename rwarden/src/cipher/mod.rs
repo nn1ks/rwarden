@@ -2,9 +2,7 @@
 
 #![allow(clippy::needless_update)] // The `Setters` derive macro causes this clippy warning
 
-use crate::{
-    util, BulkRestorable, CipherString, Getable, GetableAll, ResponseExt, Restorable, Session,
-};
+use crate::{util, BulkRestore, CipherString, Get, GetAll, ResponseExt, Restore, Session};
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use derive_setters::Setters;
@@ -420,7 +418,7 @@ pub struct Cipher {
 }
 
 #[async_trait(?Send)]
-impl Getable for Cipher {
+impl Get for Cipher {
     type Id = Uuid;
     async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
@@ -434,7 +432,7 @@ impl Getable for Cipher {
 }
 
 #[async_trait(?Send)]
-impl Restorable for Cipher {
+impl Restore for Cipher {
     type Id = Uuid;
     async fn restore(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
@@ -448,7 +446,7 @@ impl Restorable for Cipher {
 }
 
 #[async_trait(?Send)]
-impl BulkRestorable for Cipher {
+impl BulkRestore for Cipher {
     type Id = Uuid;
     async fn bulk_restore<I>(session: &mut Session, ids: I) -> crate::Result<Vec<Self>>
     where
@@ -483,7 +481,7 @@ pub struct CipherDetails {
 }
 
 #[async_trait(?Send)]
-impl Getable for CipherDetails {
+impl Get for CipherDetails {
     type Id = Uuid;
     async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
         session
@@ -497,7 +495,7 @@ impl Getable for CipherDetails {
 }
 
 #[async_trait(?Send)]
-impl GetableAll for CipherDetails {
+impl GetAll for CipherDetails {
     async fn get_all(session: &mut Session) -> crate::Result<Vec<Self>> {
         #[derive(Deserialize)]
         #[serde(rename_all = "PascalCase")]

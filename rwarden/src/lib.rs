@@ -333,28 +333,28 @@ impl Session {
 
     pub async fn get<G>(&mut self, id: G::Id) -> Result<G>
     where
-        G: Getable,
+        G: Get,
     {
         G::get(self, id).await
     }
 
     pub async fn get_all<G>(&mut self) -> Result<Vec<G>>
     where
-        G: GetableAll,
+        G: GetAll,
     {
         G::get_all(self).await
     }
 
     pub async fn restore<R>(&mut self, id: R::Id) -> Result<R>
     where
-        R: Restorable,
+        R: Restore,
     {
         R::restore(self, id).await
     }
 
     pub async fn bulk_restore<R, I>(&mut self, ids: I) -> Result<Vec<R>>
     where
-        R: BulkRestorable,
+        R: BulkRestore,
         I: IntoIterator<Item = R::Id>,
     {
         R::bulk_restore(self, ids).await
@@ -578,27 +578,27 @@ impl RegisterData {
 
 /// Trait for getting a resource.
 #[async_trait(?Send)]
-pub trait Getable: Sized {
+pub trait Get: Sized {
     type Id;
     async fn get(session: &mut Session, id: Self::Id) -> Result<Self>;
 }
 
 /// Trait for getting all resources of a type.
 #[async_trait(?Send)]
-pub trait GetableAll: Sized {
+pub trait GetAll: Sized {
     async fn get_all(session: &mut Session) -> Result<Vec<Self>>;
 }
 
 /// Trait for restoring a resource.
 #[async_trait(?Send)]
-pub trait Restorable: Sized {
+pub trait Restore: Sized {
     type Id;
     async fn restore(session: &mut Session, id: Self::Id) -> Result<Self>;
 }
 
 /// Trait for restoring multiple resources of a type.
 #[async_trait(?Send)]
-pub trait BulkRestorable: Sized {
+pub trait BulkRestore: Sized {
     type Id;
     async fn bulk_restore<I>(session: &mut Session, ids: I) -> Result<Vec<Self>>
     where
