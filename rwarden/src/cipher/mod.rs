@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset};
 use derive_setters::Setters;
 use reqwest::Method;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::json;
 use serde_repr::{Deserialize_repr as DeserializeRepr, Serialize_repr as SerializeRepr};
 use std::collections::HashMap;
@@ -189,32 +189,96 @@ impl Collection {
 
 /// The type of a cipher.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Login(Login),
     Card(Card),
     Identity(Identity),
-    #[serde(serialize_with = "serialize_secure_note")]
-    #[serde(deserialize_with = "deserialize_secure_note")]
     SecureNote,
 }
 
-fn serialize_secure_note<S>(serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let v = SecureNote {
-        ty: SecureNoteType::Generic,
-    };
-    v.serialize(serializer)
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct TypeSerde {
+    #[serde(rename = "Type")]
+    ty: i32,
+    login: Option<Login>,
+    card: Option<Card>,
+    identity: Option<Identity>,
+    secure_note: Option<SecureNote>,
 }
 
-fn deserialize_secure_note<'de, D>(deserializer: D) -> Result<(), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    SecureNote::deserialize(deserializer)?;
-    Ok(())
+impl Serialize for Type {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let v = TypeSerde {
+            ty: match self {
+                Self::Login(_) => 1,
+                Self::SecureNote => 2,
+                Self::Card(_) => 3,
+                Self::Identity(_) => 4,
+            },
+            login: match self {
+                Self::Login(v) => Some(v.clone()),
+                _ => None,
+            },
+            card: match self {
+                Self::Card(v) => Some(v.clone()),
+                _ => None,
+            },
+            identity: match self {
+                Self::Identity(v) => Some(v.clone()),
+                _ => None,
+            },
+            secure_note: match self {
+                Self::SecureNote => Some(SecureNote {
+                    ty: SecureNoteType::Generic,
+                }),
+                _ => None,
+            },
+        };
+        v.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Type {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = TypeSerde::deserialize(deserializer)?;
+        match v.ty {
+            1 => {
+                let v = v
+                    .login
+                    .ok_or_else(|| de::Error::custom("Login must not be null"))?;
+                Ok(Self::Login(v))
+            }
+            2 => {
+                v.secure_note
+                    .ok_or_else(|| de::Error::custom("SecureNote must not be null"))?;
+                Ok(Self::SecureNote)
+            }
+            3 => {
+                let v = v
+                    .card
+                    .ok_or_else(|| de::Error::custom("Card must not be null"))?;
+                Ok(Self::Card(v))
+            }
+            4 => {
+                let v = v
+                    .identity
+                    .ok_or_else(|| de::Error::custom("Identity must not be null"))?;
+                Ok(Self::Identity(v))
+            }
+            _ => Err(de::Error::invalid_value(
+                de::Unexpected::Signed(v.ty.into()),
+                &"one of `1`, `2`, `3`, or `4`",
+            )),
+        }
+    }
 }
 
 // https://github.com/bitwarden/server/blob/v1.40.0/src/Core/Models/Api/CipherLoginModel.cs
