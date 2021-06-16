@@ -4,6 +4,7 @@ use pbkdf2::pbkdf2;
 use sha2::Sha256;
 
 /// A hashed master password.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MasterPasswordHash([u8; 32]);
 
 impl MasterPasswordHash {

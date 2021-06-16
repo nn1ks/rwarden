@@ -8,6 +8,7 @@ use sha2::Sha256;
 ///
 /// [`Keys`]: crate::Keys
 /// [`MasterPasswordHash`]: crate::MasterPasswordHash
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SourceKey([u8; 32]);
 
 impl SourceKey {
