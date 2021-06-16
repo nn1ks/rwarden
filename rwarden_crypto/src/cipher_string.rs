@@ -87,7 +87,7 @@ impl CipherString {
         )
         .encrypt_vec(plaintext.as_ref());
         // let mut mac = Hmac::<Sha256>::new(GenericArray::from_slice(mac));
-        let mut mac = Hmac::<Sha256>::new_varkey(mac).unwrap();
+        let mut mac = Hmac::<Sha256>::new_from_slice(mac).unwrap();
         mac.update(&iv);
         mac.update(&ciphertext);
         let mac = mac.finalize().into_bytes().into();
@@ -113,7 +113,7 @@ impl CipherString {
         mac: &[u8; 32],
     ) -> Result<Vec<u8>, CipherDecryptionError> {
         // let mut mac = Hmac::<Sha256>::new(GenericArray::from_slice(mac));
-        let mut mac = Hmac::<Sha256>::new_varkey(mac).unwrap();
+        let mut mac = Hmac::<Sha256>::new_from_slice(mac).unwrap();
         mac.update(&self.iv);
         mac.update(&self.ciphertext);
         mac.verify(&self.mac)?;
