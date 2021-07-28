@@ -16,9 +16,14 @@ jobs:
           profile: minimal
       - name: Test
         uses: actions-rs/cargo@v1
+        env:
+          RWARDEN_EMAIL: ${{ secrets.RWARDEN_EMAIL }}
+          RWARDEN_PASSWORD: ${{ secrets.RWARDEN_PASSWORD }}
+          RWARDEN_AUTH_URL: ${{ secrets.RWARDEN_AUTH_URL }}
+          RWARDEN_BASE_URL: ${{ secrets.RWARDEN_BASE_URL }}
         with:
           command: test
-          args: --verbose
+          args: --verbose --features disable_vaultwarden_incompatible_tests
   format:
     runs-on: ubuntu-latest
     steps:
