@@ -86,8 +86,8 @@ impl CipherString {
         let mac = mac.finalize().into_bytes().into();
         Self {
             iv,
-            ciphertext,
             mac,
+            ciphertext,
         }
     }
 
