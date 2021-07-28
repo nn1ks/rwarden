@@ -9,7 +9,7 @@ use sha2::Sha256;
 /// [`Keys`]: crate::Keys
 /// [`MasterPasswordHash`]: crate::MasterPasswordHash
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SourceKey([u8; 32]);
+pub struct SourceKey(pub [u8; 32]);
 
 impl SourceKey {
     /// Creates a new [`SourceKey`].
@@ -39,23 +39,5 @@ impl SourceKey {
         let mut mac = [0; 32];
         hkdf.expand(b"mac", &mut mac).unwrap();
         (enc, mac)
-    }
-}
-
-impl From<[u8; 32]> for SourceKey {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
-    }
-}
-
-impl From<SourceKey> for [u8; 32] {
-    fn from(value: SourceKey) -> [u8; 32] {
-        value.0
-    }
-}
-
-impl AsRef<[u8; 32]> for SourceKey {
-    fn as_ref(&self) -> &[u8; 32] {
-        &self.0
     }
 }

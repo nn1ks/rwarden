@@ -1,53 +1,47 @@
-#![forbid(unsafe_code)]
-#![warn(rust_2018_idioms)]
+// #![forbid(unsafe_code)]
+#![warn(rust_2018_idioms, missing_debug_implementations)]
 
-use async_trait::async_trait;
 use derive_setters::Setters;
-use displaydoc::Display;
-use reqwest::{header, Method, RequestBuilder};
-use rwarden_crypto::{CipherString, Keys};
+use reqwest::{header, IntoUrl, Method, RequestBuilder};
+use rwarden_crypto::{CipherString, Keys, MasterPasswordHash};
 use serde::Deserialize;
 use serde_json::json;
 use serde_repr::Serialize_repr as SerializeRepr;
 use std::time::{Duration, SystemTime};
 use std::{collections::HashMap, convert::TryInto, result::Result as StdResult};
-use thiserror::Error as ThisError;
+use typed_builder::TypedBuilder;
 use url::Url;
-use util::ResponseExt;
 use uuid::Uuid;
 
+use cache::Cache;
+use util::ResponseExt;
+
+pub use error::{Error, RequestResponseError};
 pub use rwarden_crypto as crypto;
 
+mod error;
 mod util;
 
+pub mod account;
+pub mod cache;
 pub mod cipher;
+pub mod collection;
+pub mod folder;
 pub mod response;
+pub mod settings;
+pub mod sync;
 
-/// Type alias for `Result<T, Error>`.
-pub type Result<T> = StdResult<T, Error>;
-
-/// Errors that can occur while interacting the Bitwarden API.
-#[derive(Debug, Display, ThisError)]
-pub enum Error {
-    /// Failed to send request.
-    Request(#[from] reqwest::Error),
-    /// Failed to parse URL.
-    ParseUrl(#[from] url::ParseError),
-    /// Failed to decrypt cipher string.
-    CipherDecryption(#[from] crypto::CipherDecryptionError),
-    /// Error returned from the server.
-    Response(#[from] response::Error),
-}
+/// Type alias for `Result<TOk, Error<TCacheError>>`.
+pub type Result<TOk, TCacheError> = StdResult<TOk, Error<TCacheError>>;
 
 /// Struct for specifying the URLs of API endpoints.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Urls {
     pub base: Url,
     pub auth: Url,
-    // pub icon_url: Url, // not needed yet
-    // pub notifications_url: Url, // what is this URL for?
-    // pub events_url: Url, // what is this URL for?
-    // pub web_vault_url: Url, // is probably never needed
+    // pub icon: Url,
+    // pub notifications: Url,
+    // pub events: Url,
 }
 
 impl Urls {
@@ -125,35 +119,24 @@ impl Client {
         &self.urls
     }
 
-    fn request<F, S>(
-        &self,
-        method: Method,
-        url: F,
-        path: S,
-    ) -> StdResult<RequestBuilder, url::ParseError>
-    where
-        F: Fn(&Urls) -> &Url,
-        S: AsRef<str>,
-    {
-        let url = url(&self.urls).join(path.as_ref())?;
-        Ok(self.client.request(method, url))
-    }
-
-    fn request_auth(&self) -> StdResult<RequestBuilder, url::ParseError> {
-        self.request(Method::POST, |urls| &urls.auth, "")
-    }
-
-    async fn prelogin(&self, email: &str) -> Result<Prelogin> {
-        Ok(self
-            .request(Method::POST, |urls| &urls.base, "accounts/prelogin")?
+    async fn prelogin(&self, email: &str) -> StdResult<Prelogin, RequestResponseError> {
+        self.client
+            .request(
+                Method::POST,
+                format!("{}/accounts/prelogin", self.urls.base),
+            )
             .json(&json!({ "email": email }))
             .send()
             .await?
             .parse()
-            .await?)
+            .await
     }
 
-    pub async fn login(&self, data: &LoginData) -> Result<Session> {
+    pub async fn login<TCache: Cache>(
+        self,
+        data: &LoginData,
+        cache: TCache,
+    ) -> Result<Session<TCache>, TCache::Error> {
         let Prelogin {
             kdf_type,
             kdf_iterations,
@@ -166,7 +149,7 @@ impl Client {
         let mut req = HashMap::new();
         req.insert("grant_type", "password");
         req.insert("username", &data.email);
-        let master_password_hash = master_password_hash.encode();
+        let master_password_hash = master_password_hash.to_string();
         req.insert("password", &master_password_hash);
         req.insert("client_id", &data.client_id);
         req.insert("scope", "api offline_access");
@@ -194,7 +177,8 @@ impl Client {
         }
 
         let token = self
-            .request_auth()?
+            .client
+            .request(Method::POST, self.urls.auth.clone())
             .form(&req)
             .send()
             .await?
@@ -202,17 +186,19 @@ impl Client {
             .await?;
         let keys = crypto::Keys::new(&source_key, &token.key)?;
         Ok(Session {
-            client: self.clone(),
+            client: self.client,
+            cache,
+            urls: self.urls,
             keys,
-            token_expiry_time: get_token_expiry_time(token.expires_in),
-            tokens: Tokens {
-                refresh_token: token.refresh_token,
+            refresh_token: token.refresh_token,
+            access_token_data: Some(AccessTokenData {
                 access_token: token.access_token,
-            },
+                expiry_time: get_token_expiry_time(token.expires_in),
+            }),
         })
     }
 
-    pub async fn register(&self, data: &RegisterData) -> Result<()> {
+    pub async fn register(&self, data: &RegisterData) -> Result<(), RequestResponseError> {
         let kdf_iterations = data.kdf_iterations.unwrap_or(100_000);
         let kdf_type = data.kdf_type.unwrap_or(crypto::KdfType::Pbkdf2Sha256);
         let source_key =
@@ -223,7 +209,7 @@ impl Client {
 
         let req = json!({
             "Email": data.email,
-            "MasterPasswordHash": master_password_hash.encode(),
+            "MasterPasswordHash": master_password_hash,
             "MasterPasswordHint": data.password_hint,
             "Key": protected_symmetric_key.to_string(),
             "Name": data.name,
@@ -232,12 +218,17 @@ impl Client {
             "KdfIterations": data.kdf_iterations,
         });
 
-        self.request(Method::POST, |urls| &urls.base, "accounts/register")?
+        self.client
+            .request(
+                Method::POST,
+                format!("{}/accounts/register", self.urls.base),
+            )
             .json(&req)
             .send()
             .await?
             .parse_empty()
-            .await
+            .await?;
+        Ok(())
     }
 }
 
@@ -248,36 +239,68 @@ fn get_token_expiry_time(expires_in: Option<i64>) -> SystemTime {
             .unwrap_or_default()
 }
 
-/// Tokens used for accessing the Bitwarden API.
+/// An access token and its expiry time.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Tokens {
-    pub refresh_token: String,
+pub struct AccessTokenData {
     pub access_token: String,
+    pub expiry_time: SystemTime,
+}
+
+impl AccessTokenData {
+    fn token_has_expired(&self) -> bool {
+        self.expiry_time < SystemTime::now()
+    }
 }
 
 /// A session used for interacting with the Bitwarden API.
-#[derive(Debug, Clone)]
-pub struct Session {
-    client: Client,
+///
+/// # Example
+///
+/// Creating a [`Session`]:
+///
+/// ```
+/// use rwarden::{cache::EmptyCache, AccessTokenData, Session, Urls};
+/// use std::time::SystemTime;
+///
+/// # let keys = rwarden::crypto::Keys::generate();
+/// let session = Session::builder()
+///     .cache(EmptyCache)
+///     .urls(Urls::official())
+///     .keys(keys)
+///     .refresh_token("foo")
+///     .access_token_data(AccessTokenData { // optional
+///         access_token: "bar".to_owned(),
+///         expiry_time: SystemTime::now(),
+///     })
+///     .build();
+/// ```
+#[derive(Debug, Clone, TypedBuilder)]
+pub struct Session<TCache> {
+    #[builder(default, setter(skip))]
+    client: reqwest::Client,
+    cache: TCache,
+    urls: Urls,
     keys: Keys,
-    token_expiry_time: SystemTime,
-    tokens: Tokens,
+    #[builder(setter(into))]
+    refresh_token: String,
+    #[builder(default, setter(strip_option))]
+    access_token_data: Option<AccessTokenData>,
 }
 
-impl Session {
-    /// Creates a new [`Session`].
-    pub fn new(urls: Urls, keys: Keys, tokens: Tokens) -> Self {
-        Self {
-            client: Client::new(urls),
-            keys,
-            token_expiry_time: SystemTime::now(),
-            tokens,
-        }
+impl<TCache> Session<TCache> {
+    /// Returns a shared reference to the cache.
+    pub fn cache(&self) -> &TCache {
+        &self.cache
+    }
+
+    /// Returns a mutable reference to the cache.
+    pub fn cache_mut(&mut self) -> &mut TCache {
+        &mut self.cache
     }
 
     /// Returns the URLs of the API endpoints.
     pub fn urls(&self) -> &Urls {
-        &self.client.urls
+        &self.urls
     }
 
     /// Returns the keys.
@@ -285,158 +308,210 @@ impl Session {
         &self.keys
     }
 
-    /// Returns the tokens.
-    pub fn tokens(&self) -> &Tokens {
-        &self.tokens
-    }
-
-    /// Returns whether the token has expired.
-    fn token_has_expired(&self) -> bool {
-        self.token_expiry_time <= SystemTime::now()
-    }
-
-    async fn request<F, S>(
+    async fn request<S>(
         &mut self,
         method: Method,
-        urls: F,
-        path: S,
-    ) -> Result<RequestBuilder>
+        url: S,
+    ) -> StdResult<RequestBuilder, RequestResponseError>
     where
-        F: Fn(&Urls) -> &Url,
-        S: AsRef<str>,
+        S: IntoUrl,
     {
-        if self.token_has_expired() {
-            self.refresh_token().await?;
+        let refresh_access_token = match &self.access_token_data {
+            Some(v) if v.token_has_expired() => true,
+            None => true,
+            Some(_) => false,
+        };
+        if refresh_access_token {
+            self.refresh_access_token().await?;
         }
-        Ok(self.client.request(method, urls, path)?.header(
-            header::AUTHORIZATION,
-            format!("Bearer {}", self.tokens.access_token),
-        ))
+        // `unwrap` is safe here because the `refresh_access_token` function sets the access token
+        let access_token = &self.access_token_data.as_ref().unwrap().access_token;
+        Ok(self
+            .client
+            .request(method, url)
+            .header(header::AUTHORIZATION, format!("Bearer {}", access_token)))
     }
 
-    pub(crate) async fn request_base<S>(
-        &mut self,
-        method: Method,
-        path: S,
-    ) -> Result<RequestBuilder>
-    where
-        S: AsRef<str>,
-    {
-        self.request(method, |urls| &urls.base, path).await
-    }
-
-    /// Refreshes the token.
-    async fn refresh_token(&mut self) -> Result<()> {
-        let req = json!({
-            "grant_type": "refresh_token",
-            "refresh_token": self.tokens.refresh_token,
-        });
+    /// Refreshes the access token.
+    async fn refresh_access_token(&mut self) -> StdResult<(), RequestResponseError> {
         let token = self
             .client
-            .request_auth()?
-            .json(&req)
+            .request(Method::POST, self.urls.auth.clone())
+            .form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", &self.refresh_token),
+            ])
             .send()
             .await?
             .parse::<TokenResponse>()
             .await?;
-        self.tokens.refresh_token = token.refresh_token;
-        self.tokens.access_token = token.access_token;
-        self.token_expiry_time = get_token_expiry_time(token.expires_in);
+        self.refresh_token = token.refresh_token;
+        self.access_token_data = Some(AccessTokenData {
+            access_token: token.access_token,
+            expiry_time: get_token_expiry_time(token.expires_in),
+        });
         Ok(())
     }
 
-    pub async fn get<G>(&mut self, id: G::Id) -> Result<G>
-    where
-        G: Get,
-    {
-        G::get(self, id).await
+    /// Sends a token to the given email address that can be used to change the email address.
+    ///
+    /// To change the email address with the token, [`account::request::ModifyEmail`] can be used.
+    pub async fn send_email_modification_token<S: AsRef<str>>(
+        &mut self,
+        new_email: S,
+        master_password_hash: &MasterPasswordHash,
+    ) -> StdResult<(), RequestResponseError> {
+        self.request(
+            Method::POST,
+            format!("{}/accounts/email-token", self.urls().base),
+        )
+        .await?
+        .json(&json!({
+            "NewEmail": new_email.as_ref(),
+            "MasterPasswordHash": master_password_hash
+        }))
+        .send()
+        .await?
+        .parse_empty()
+        .await?;
+        Ok(())
     }
 
-    pub async fn get_all<G>(&mut self) -> Result<Vec<G>>
-    where
-        G: GetAll,
-    {
-        G::get_all(self).await
+    /// Sends a token to this users email address that can be used to verify the email address.
+    ///
+    /// To verify the email address with the token, the [`Session::verify_email`] function can be
+    /// used.
+    pub async fn send_email_verification_token(&mut self) -> StdResult<(), RequestResponseError> {
+        self.request(
+            Method::POST,
+            format!("{}/accounts/verify-email", self.urls().base),
+        )
+        .await?
+        .send()
+        .await?
+        .parse_empty()
+        .await?;
+        Ok(())
     }
 
-    pub async fn restore<R>(&mut self, id: R::Id) -> Result<R>
+    pub async fn verify_email<S>(&mut self, token: S) -> Result<(), TCache::Error>
     where
-        R: Restore,
+        TCache: Cache,
+        S: AsRef<str>,
     {
-        R::restore(self, id).await
+        let account = self.get::<account::Account>().execute().await?;
+        self.client
+            .request(
+                Method::POST,
+                format!("{}/accounts/verify-email-token", self.urls().base),
+            )
+            .json(&json!({ "UserId": account.id, "Token": token.as_ref() }))
+            .send()
+            .await?
+            .parse_empty()
+            .await?;
+        Ok(())
     }
 
-    pub async fn bulk_restore<R, I>(&mut self, ids: I) -> Result<Vec<R>>
-    where
-        R: BulkRestore,
-        I: IntoIterator<Item = R::Id>,
-    {
-        R::bulk_restore(self, ids).await
+    pub async fn verify_password(
+        &mut self,
+        master_password_hash: &MasterPasswordHash,
+    ) -> Result<(), RequestResponseError> {
+        self.request(
+            Method::POST,
+            format!("{}/accounts/verify-password", self.urls().base),
+        )
+        .await?
+        .json(&json!({ "MasterPasswordHash": master_password_hash }))
+        .send()
+        .await?
+        .parse_empty()
+        .await?;
+        Ok(())
     }
 
-    pub async fn delete<D>(&mut self, deleter: &D, id: D::Id) -> Result<()>
+    pub fn get<'session, G>(&'session mut self) -> G::Request
     where
-        D: Deleter,
+        G: Get<'session, TCache>,
     {
-        deleter.execute(self, id).await
+        G::get(self)
     }
 
-    pub async fn bulk_delete<D, I>(&mut self, bulk_deleter: &D, ids: I) -> Result<()>
+    pub fn get_all<'session, G>(&'session mut self) -> G::Request
     where
-        D: BulkDeleter,
-        I: IntoIterator<Item = D::Id>,
+        G: GetAll<'session, TCache>,
     {
-        bulk_deleter.execute(self, ids).await
+        G::get_all(self)
     }
 
-    pub async fn create<C>(&mut self, creator: &C) -> Result<C::Response>
+    pub fn create<'session, C>(&'session mut self) -> C::Request
     where
-        C: Creator,
+        C: Create<'session, TCache>,
     {
-        creator.execute(self).await
+        C::create(self)
     }
 
-    pub async fn modify<M>(&mut self, modifier: &M, id: M::Id) -> Result<M::Response>
+    pub fn delete<'session, D>(&'session mut self) -> D::Request
     where
-        M: Modifier,
+        D: Delete<'session, TCache>,
     {
-        modifier.execute(self, id).await
+        D::delete(self)
     }
 
-    pub async fn import<I>(&mut self, importer: &I) -> Result<()>
+    pub fn bulk_delete<'session, D>(&'session mut self) -> D::Request
     where
-        I: Importer,
+        D: BulkDelete<'session, TCache>,
     {
-        importer.execute(self).await
+        D::bulk_delete(self)
     }
 
-    pub async fn share<S>(&mut self, sharer: &S, id: S::Id) -> Result<S::Response>
+    pub fn restore<'session, R>(&'session mut self) -> R::Request
     where
-        S: Sharer,
+        R: Restore<'session, TCache>,
     {
-        sharer.execute(self, id).await
+        R::restore(self)
     }
 
-    pub async fn bulk_share<S>(&mut self, bulk_sharer: &S) -> Result<S::Response>
+    pub fn bulk_restore<'session, R>(&'session mut self) -> R::Request
     where
-        S: BulkSharer,
+        R: BulkRestore<'session, TCache>,
     {
-        bulk_sharer.execute(self).await
+        R::bulk_restore(self)
     }
 
-    pub async fn bulk_move<M, I>(&mut self, bulk_mover: &M, ids: I) -> Result<()>
+    pub fn modify<'session, M>(&'session mut self) -> M::Request
     where
-        M: BulkMover,
-        I: IntoIterator<Item = M::Id>,
+        M: Modify<'session, TCache>,
     {
-        bulk_mover.execute(self, ids).await
+        M::modify(self)
     }
 
-    pub async fn purge<P>(&mut self, purger: &P) -> Result<()>
+    pub fn share<'session, S>(&'session mut self) -> S::Request
     where
-        P: Purger,
+        S: Share<'session, TCache>,
     {
-        purger.execute(self).await
+        S::share(self)
+    }
+
+    pub fn bulk_share<'session, S>(&'session mut self) -> S::Request
+    where
+        S: BulkShare<'session, TCache>,
+    {
+        S::bulk_share(self)
+    }
+
+    pub fn bulk_move<'session, M>(&'session mut self) -> M::Request
+    where
+        M: BulkMove<'session, TCache>,
+    {
+        M::bulk_move(self)
+    }
+
+    pub fn purge<'session, P>(&'session mut self) -> P::Request
+    where
+        P: Purge<'session, TCache>,
+    {
+        P::purge(self)
     }
 }
 
@@ -497,6 +572,7 @@ pub enum TwoFactorProvider {
     U2f = 4,
     Remember = 5,
     OrganizationDuo = 6,
+    WebAuthn = 7,
 }
 
 /// Data used for performing logins.
@@ -519,7 +595,6 @@ pub struct LoginData {
     pub two_factor_provider: Option<TwoFactorProvider>,
     #[setters(into)]
     pub two_factor_token: Option<String>,
-    #[setters(bool)]
     pub two_factor_remember: bool,
 }
 
@@ -590,98 +665,103 @@ impl RegisterData {
     }
 }
 
+/// Trait for request types.
+pub trait Request<'session, TCache> {
+    fn new(session: &'session mut Session<TCache>) -> Self;
+}
+
 /// Trait for getting a resource.
-#[async_trait(?Send)]
-pub trait Get: Sized {
-    type Id;
-    async fn get(session: &mut Session, id: Self::Id) -> Result<Self>;
+pub trait Get<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn get(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
 /// Trait for getting all resources of a type.
-#[async_trait(?Send)]
-pub trait GetAll: Sized {
-    async fn get_all(session: &mut Session) -> Result<Vec<Self>>;
-}
-
-/// Trait for restoring a resource.
-#[async_trait(?Send)]
-pub trait Restore: Sized {
-    type Id;
-    async fn restore(session: &mut Session, id: Self::Id) -> Result<Self>;
-}
-
-/// Trait for restoring multiple resources of a type.
-#[async_trait(?Send)]
-pub trait BulkRestore: Sized {
-    type Id;
-    async fn bulk_restore<I>(session: &mut Session, ids: I) -> Result<Vec<Self>>
-    where
-        I: IntoIterator<Item = Self::Id>;
-}
-
-/// Trait for deleting a resource.
-#[async_trait(?Send)]
-pub trait Deleter {
-    type Id;
-    async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<()>;
-}
-
-/// Trait for bulk deleting resources.
-#[async_trait(?Send)]
-pub trait BulkDeleter {
-    type Id;
-    async fn execute<I>(&self, session: &mut Session, ids: I) -> Result<()>
-    where
-        I: IntoIterator<Item = Self::Id>;
+pub trait GetAll<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn get_all(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
 /// Trait for creating a resource.
-#[async_trait(?Send)]
-pub trait Creator {
-    type Response;
-    async fn execute(&self, session: &mut Session) -> Result<Self::Response>;
+pub trait Create<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn create(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
+}
+
+/// Trait for deleting a resource.
+pub trait Delete<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn delete(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
+}
+
+/// Trait for deleting multiple resources of a type.
+pub trait BulkDelete<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn bulk_delete(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
 /// Trait for modifying a resource.
-#[async_trait(?Send)]
-pub trait Modifier {
-    type Id;
-    type Response;
-    async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<Self::Response>;
+pub trait Modify<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn modify(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
-/// Trait for importing resources.
-#[async_trait]
-pub trait Importer {
-    async fn execute(&self, session: &mut Session) -> Result<()>;
+/// Trait for restoring a resource.
+pub trait Restore<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn restore(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
+}
+
+/// Trait for restoring multiple resources of a type.
+pub trait BulkRestore<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn bulk_restore(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
 /// Trait for sharing a resource.
-#[async_trait(?Send)]
-pub trait Sharer {
-    type Id;
-    type Response;
-    async fn execute(&self, session: &mut Session, id: Self::Id) -> Result<Self::Response>;
+pub trait Share<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn share(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
-/// Trait for bulk sharing resources.
-#[async_trait(?Send)]
-pub trait BulkSharer {
-    type Response;
-    async fn execute(&self, session: &mut Session) -> Result<Self::Response>;
+/// Trait for sharing multiple resources of a type.
+pub trait BulkShare<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn bulk_share(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
-/// Trait for bulk moving resources.
-#[async_trait(?Send)]
-pub trait BulkMover {
-    type Id;
-    async fn execute<I>(&self, session: &mut Session, ids: I) -> Result<()>
-    where
-        I: IntoIterator<Item = Self::Id>;
+/// Trait for moving multiple resources of a type.
+pub trait BulkMove<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn bulk_move(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }
 
 /// Trait for purging resources.
-#[async_trait(?Send)]
-pub trait Purger {
-    async fn execute(&self, session: &mut Session) -> Result<()>;
+pub trait Purge<'session, TCache: 'session> {
+    type Request: Request<'session, TCache>;
+    fn purge(session: &'session mut Session<TCache>) -> Self::Request {
+        Self::Request::new(session)
+    }
 }

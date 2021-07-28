@@ -8,25 +8,18 @@ use sha2::Sha256;
 use std::convert::{TryFrom, TryInto};
 use std::{fmt, str::FromStr};
 
-/// An encrypted string using AES-CBC 256-bit encryption.
+/// An encrypted string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CipherString {
-    iv: [u8; 16],
-    mac: [u8; 32],
-    ciphertext: Vec<u8>,
+    /// The initialization vector.
+    pub iv: [u8; 16],
+    /// The MAC key.
+    pub mac: [u8; 32],
+    /// The encrypted data.
+    pub ciphertext: Vec<u8>,
 }
 
 impl CipherString {
-    /// Creates a new [`CipherString`] from an initialization vector (`iv`), a MAC key (`mac`), and
-    /// the ciphertext.
-    pub fn new(iv: [u8; 16], mac: [u8; 32], ciphertext: Vec<u8>) -> Self {
-        Self {
-            iv,
-            mac,
-            ciphertext,
-        }
-    }
-
     /// Parse an encrypted string in the format `<ty>.<iv>|<ct>|<mac>`.
     ///
     /// - `<ty>`: The encryption type (currently only type `2` is supported)
@@ -103,7 +96,7 @@ impl CipherString {
     where
         P: AsRef<[u8]>,
     {
-        Self::encrypt(plaintext, keys.enc(), keys.mac())
+        Self::encrypt(plaintext, &keys.enc, &keys.mac)
     }
 
     /// Decrypt this encrypted string using the given encryption and MAC key.
@@ -137,13 +130,13 @@ impl CipherString {
 
     /// Decrypt this encrypted string using the encryption and MAC key from `keys`.
     pub fn decrypt_with_keys_raw(&self, keys: &Keys) -> Result<Vec<u8>, CipherDecryptionError> {
-        self.decrypt_raw(keys.enc(), keys.mac())
+        self.decrypt_raw(&keys.enc, &keys.mac)
     }
 
     /// Decrypt this encrypted string using the encryption and MAC key from `keys` and convert the
     /// decrypted data to a [`String`].
     pub fn decrypt_with_keys(&self, keys: &Keys) -> Result<String, CipherDecryptionStringError> {
-        self.decrypt(keys.enc(), keys.mac())
+        self.decrypt(&keys.enc, &keys.mac)
     }
 }
 
@@ -183,8 +176,7 @@ impl<'de> de::Visitor<'de> for CipherStringVisitor {
     }
 
     fn visit_str<E: de::Error>(self, value: &str) -> Result<CipherString, E> {
-        CipherString::from_str(value)
-            .map_err(|e| E::custom(format!("invalid cipher string: {}", e)))
+        CipherString::parse(value).map_err(|e| E::custom(format!("invalid cipher string: {}", e)))
     }
 }
 

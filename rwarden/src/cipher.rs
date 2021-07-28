@@ -1,35 +1,17 @@
 //! Module for cipher resources.
 
-#![allow(clippy::needless_update)] // The `Setters` derive macro causes this clippy warning
-
-use crate::{util, BulkRestore, CipherString, Get, GetAll, ResponseExt, Restore, Session};
-use async_trait::async_trait;
+use crate::{
+    cache::Cache, util, BulkDelete, BulkMove, BulkRestore, BulkShare, CipherString, Create, Delete,
+    Get, GetAll, Modify, Purge, Restore, Share,
+};
 use chrono::{DateTime, FixedOffset};
 use derive_setters::Setters;
-use reqwest::Method;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::json;
+use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr as DeserializeRepr, Serialize_repr as SerializeRepr};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub use create::Creator;
-pub use delete::{BulkDeleter, Deleter};
-pub use import::{
-    AccountImporter, AccountImporterEntry, OrganizationImporter, OrganizationImporterEntry,
-};
-pub use modify::{CollectionModifier, Modifier, PartialModifier};
-pub use purge::Purger;
-pub use r#move::BulkMover;
-pub use share::{BulkSharer, Sharer};
-
-mod create;
-mod delete;
-mod import;
-mod modify;
-mod r#move;
-mod purge;
-mod share;
+pub mod request;
 
 /// The type of a custom field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, DeserializeRepr, SerializeRepr)]
@@ -86,7 +68,6 @@ pub struct RequestModel {
     pub ty: Type,
     pub notes: Option<CipherString>,
     pub fields: Vec<Field>,
-    #[setters(bool)]
     pub favorite: bool,
     pub password_history: Vec<PasswordHistoryEntry>,
     pub attachments: HashMap<String, Attachment>,
@@ -108,14 +89,6 @@ impl RequestModel {
             last_known_revision_date: None,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct RequestModelWithId {
-    #[serde(flatten)]
-    pub inner: RequestModel,
-    pub id: Uuid,
 }
 
 /// The owner type of a cipher.
@@ -147,43 +120,6 @@ impl Owner {
         }
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct Folder {
-    pub name: CipherString,
-}
-
-impl Folder {
-    pub fn new(name: CipherString) -> Self {
-        Self { name }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct GroupSelection {
-    pub id: Uuid,
-    pub read_only: bool,
-    pub hide_passwords: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct Collection {
-    pub name: CipherString,
-    pub external_id: Option<String>,
-    pub groups: Vec<GroupSelection>,
-}
-
-impl Collection {
-    pub fn new(name: CipherString) -> Self {
-        Self {
-            name,
-            external_id: None,
-            groups: Vec::new(),
-        }
-    }
-}
 
 /// The type of a cipher.
 #[allow(clippy::large_enum_variant)]
@@ -195,49 +131,34 @@ pub enum Type {
     SecureNote,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct TypeSerde {
-    #[serde(rename = "Type")]
-    ty: i32,
-    login: Option<Login>,
-    card: Option<Card>,
-    identity: Option<Identity>,
-    secure_note: Option<SecureNote>,
-}
-
 impl Serialize for Type {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let v = TypeSerde {
-            ty: match self {
-                Self::Login(_) => 1,
-                Self::SecureNote => 2,
-                Self::Card(_) => 3,
-                Self::Identity(_) => 4,
-            },
-            login: match self {
-                Self::Login(v) => Some(v.clone()),
-                _ => None,
-            },
-            card: match self {
-                Self::Card(v) => Some(v.clone()),
-                _ => None,
-            },
-            identity: match self {
-                Self::Identity(v) => Some(v.clone()),
-                _ => None,
-            },
-            secure_note: match self {
-                Self::SecureNote => Some(SecureNote {
+        let mut state = serializer.serialize_struct("Type", 2)?;
+        match self {
+            Self::Login(v) => {
+                state.serialize_field("Type", &1)?;
+                state.serialize_field("Login", &v)?;
+            }
+            Self::SecureNote => {
+                state.serialize_field("Type", &2)?;
+                let v = SecureNote {
                     ty: SecureNoteType::Generic,
-                }),
-                _ => None,
-            },
-        };
-        v.serialize(serializer)
+                };
+                state.serialize_field("SecureNote", &v)?;
+            }
+            Self::Card(v) => {
+                state.serialize_field("Type", &3)?;
+                state.serialize_field("Card", &v)?;
+            }
+            Self::Identity(v) => {
+                state.serialize_field("Type", &4)?;
+                state.serialize_field("Identity", &v)?;
+            }
+        }
+        state.end()
     }
 }
 
@@ -246,7 +167,18 @@ impl<'de> Deserialize<'de> for Type {
     where
         D: Deserializer<'de>,
     {
-        let v = TypeSerde::deserialize(deserializer)?;
+        #[derive(Deserialize)]
+        #[serde(rename_all = "PascalCase")]
+        struct Inner {
+            #[serde(rename = "Type")]
+            ty: i32,
+            login: Option<Login>,
+            card: Option<Card>,
+            identity: Option<Identity>,
+            secure_note: Option<SecureNote>,
+        }
+
+        let v = Inner::deserialize(deserializer)?;
         match v.ty {
             1 => {
                 let v = v
@@ -280,7 +212,7 @@ impl<'de> Deserialize<'de> for Type {
 }
 
 // https://github.com/bitwarden/server/blob/v1.40.0/src/Core/Models/Api/CipherLoginModel.cs
-/// A login cipher type.
+/// Login cipher type.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Setters, Deserialize, Serialize)]
 #[setters(strip_option, prefix = "with_")]
 #[serde(rename_all = "PascalCase")]
@@ -333,7 +265,7 @@ pub enum LoginUriMatchType {
     Never = 5,
 }
 
-/// A card cipher type.
+/// Card cipher type.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Setters, Deserialize, Serialize)]
 #[setters(strip_option, prefix = "with_")]
 #[serde(rename_all = "PascalCase")]
@@ -354,7 +286,7 @@ pub struct Card {
     pub code: Option<CipherString>,
 }
 
-/// A identity cipher type.
+/// Identity cipher type.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Setters, Deserialize, Serialize)]
 #[setters(strip_option, prefix = "with_")]
 #[serde(rename_all = "PascalCase")]
@@ -393,16 +325,17 @@ enum SecureNoteType {
 
 // https://github.com/bitwarden/server/blob/v1.40.0/src/Core/Models/Api/Response/CipherResponseModel.cs
 /// A cipher resource.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+// NOTE: Serialize is only needed for cache
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Cipher {
     pub id: Uuid,
     pub folder_id: Option<Uuid>,
     pub organization_id: Option<Uuid>,
-    pub name: String,
+    pub name: CipherString,
     #[serde(flatten)]
     pub ty: Type,
-    pub notes: Option<String>,
+    pub notes: Option<CipherString>,
     #[serde(deserialize_with = "util::deserialize_optional")]
     pub fields: Vec<Field>,
     #[serde(deserialize_with = "util::deserialize_optional")]
@@ -411,67 +344,59 @@ pub struct Cipher {
     #[serde(deserialize_with = "util::deserialize_optional")]
     pub password_history: Vec<PasswordHistoryEntry>,
     pub revision_date: DateTime<FixedOffset>,
-    pub deletion_date: Option<DateTime<FixedOffset>>,
+    pub deleted_date: Option<DateTime<FixedOffset>>,
     pub favorite: bool,
     pub edit: bool,
     pub view_password: bool,
 }
 
-#[async_trait(?Send)]
-impl Get for Cipher {
-    type Id = Uuid;
-    async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
-        session
-            .request_base(Method::GET, format!("ciphers/{}", id))
-            .await?
-            .send()
-            .await?
-            .parse()
-            .await
-    }
+impl<'session, TCache: 'session> Get<'session, TCache> for Cipher {
+    type Request = request::DefaultGet<'session, TCache>;
 }
 
-#[async_trait(?Send)]
-impl Restore for Cipher {
-    type Id = Uuid;
-    async fn restore(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
-        session
-            .request_base(Method::GET, format!("ciphers/{}/restore", id))
-            .await?
-            .send()
-            .await?
-            .parse()
-            .await
-    }
+impl<'session, TCache: Cache + 'session> Create<'session, TCache> for Cipher {
+    type Request = request::DefaultCreate<'session, TCache>;
 }
 
-#[async_trait(?Send)]
-impl BulkRestore for Cipher {
-    type Id = Uuid;
-    async fn bulk_restore<I>(session: &mut Session, ids: I) -> crate::Result<Vec<Self>>
-    where
-        I: IntoIterator<Item = Self::Id>,
-    {
-        let body = json!({ "ids": ids.into_iter().collect::<Vec<_>>() });
-        #[derive(Deserialize)]
-        #[serde(rename_all = "PascalCase")]
-        struct Response {
-            data: Vec<Cipher>,
-        }
-        let response = session
-            .request_base(Method::GET, "ciphers/restore")
-            .await?
-            .json(&body)
-            .send()
-            .await?
-            .parse::<Response>()
-            .await?;
-        Ok(response.data)
-    }
+impl<'session, TCache: 'session> Delete<'session, TCache> for Cipher {
+    type Request = request::DefaultDelete<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> BulkDelete<'session, TCache> for Cipher {
+    type Request = request::DefaultBulkDelete<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> Modify<'session, TCache> for Cipher {
+    type Request = request::Modify<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> Restore<'session, TCache> for Cipher {
+    type Request = request::DefaultRestore<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> BulkRestore<'session, TCache> for Cipher {
+    type Request = request::DefaultBulkRestore<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> Share<'session, TCache> for Cipher {
+    type Request = request::DefaultShare<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> BulkShare<'session, TCache> for Cipher {
+    type Request = request::DefaultBulkShare<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> BulkMove<'session, TCache> for Cipher {
+    type Request = request::DefaultBulkMove<'session, TCache>;
+}
+
+impl<'session, TCache: 'session> Purge<'session, TCache> for Cipher {
+    type Request = request::DefaultPurge<'session, TCache>;
 }
 
 /// A cipher resource with additional information.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+// NOTE: Serialize is only needed for cache
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct CipherDetails {
     #[serde(flatten)]
@@ -480,35 +405,10 @@ pub struct CipherDetails {
     pub collection_ids: Vec<Uuid>,
 }
 
-#[async_trait(?Send)]
-impl Get for CipherDetails {
-    type Id = Uuid;
-    async fn get(session: &mut Session, id: Self::Id) -> crate::Result<Self> {
-        session
-            .request_base(Method::GET, format!("ciphers/{}/details", id))
-            .await?
-            .send()
-            .await?
-            .parse()
-            .await
-    }
+impl<'session, TCache: 'session> Get<'session, TCache> for CipherDetails {
+    type Request = request::DefaultGetDetails<'session, TCache>;
 }
 
-#[async_trait(?Send)]
-impl GetAll for CipherDetails {
-    async fn get_all(session: &mut Session) -> crate::Result<Vec<Self>> {
-        #[derive(Deserialize)]
-        #[serde(rename_all = "PascalCase")]
-        struct Response {
-            data: Vec<CipherDetails>,
-        }
-        let response = session
-            .request_base(Method::GET, "ciphers")
-            .await?
-            .send()
-            .await?
-            .parse::<Response>()
-            .await?;
-        Ok(response.data)
-    }
+impl<'session, TCache: 'session> GetAll<'session, TCache> for CipherDetails {
+    type Request = request::GetAllDetails<'session, TCache>;
 }

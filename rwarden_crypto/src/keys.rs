@@ -2,11 +2,13 @@ use crate::{CipherDecryptionError, CipherString, SourceKey};
 use rand::{rngs::OsRng, RngCore};
 use std::convert::TryInto;
 
-/// Keys used for decrypting cipher strings.
+/// Keys used for encrypting/decrypting cipher strings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Keys {
-    enc: [u8; 32],
-    mac: [u8; 32],
+    /// The encryption key.
+    pub enc: [u8; 32],
+    /// The MAC key.
+    pub mac: [u8; 32],
 }
 
 impl Keys {
@@ -33,15 +35,5 @@ impl Keys {
 
     pub(crate) fn into_vec(self) -> Vec<u8> {
         [self.enc, self.mac].concat()
-    }
-
-    /// Returns the encryption key.
-    pub fn enc(&self) -> &[u8; 32] {
-        &self.enc
-    }
-
-    /// Returns the MAC key.
-    pub fn mac(&self) -> &[u8; 32] {
-        &self.mac
     }
 }

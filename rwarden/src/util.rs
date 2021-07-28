@@ -1,4 +1,4 @@
-use crate::response;
+use crate::{response, RequestResponseError};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
@@ -13,13 +13,13 @@ where
 
 #[async_trait]
 pub trait ResponseExt {
-    async fn parse<T: DeserializeOwned>(self) -> crate::Result<T>;
-    async fn parse_empty(self) -> crate::Result<()>;
+    async fn parse<T: DeserializeOwned>(self) -> Result<T, RequestResponseError>;
+    async fn parse_empty(self) -> Result<(), RequestResponseError>;
 }
 
 #[async_trait]
 impl ResponseExt for reqwest::Response {
-    async fn parse<T: DeserializeOwned>(self) -> crate::Result<T> {
+    async fn parse<T: DeserializeOwned>(self) -> Result<T, RequestResponseError> {
         if self.status().is_success() {
             Ok(self.json().await?)
         } else {
@@ -28,7 +28,7 @@ impl ResponseExt for reqwest::Response {
         }
     }
 
-    async fn parse_empty(self) -> crate::Result<()> {
+    async fn parse_empty(self) -> Result<(), RequestResponseError> {
         if self.status().is_success() {
             Ok(())
         } else {
@@ -36,4 +36,11 @@ impl ResponseExt for reqwest::Response {
             return Err(e.into());
         }
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ListResponse<T> {
+    pub data: Vec<T>,
+    pub continuation_token: Option<String>,
 }

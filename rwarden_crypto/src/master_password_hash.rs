@@ -1,11 +1,13 @@
 use crate::{KdfType, SourceKey};
 use hmac::Hmac;
 use pbkdf2::pbkdf2;
+use serde::{Serialize, Serializer};
 use sha2::Sha256;
+use std::fmt;
 
 /// A hashed master password.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MasterPasswordHash([u8; 32]);
+pub struct MasterPasswordHash(pub [u8; 32]);
 
 impl MasterPasswordHash {
     /// Creates a new [`MasterPasswordHash`].
@@ -17,7 +19,7 @@ impl MasterPasswordHash {
             KdfType::Pbkdf2Sha256 => {
                 let mut master_password_hash = [0; 32];
                 pbkdf2::<Hmac<Sha256>>(
-                    source_key.as_ref(),
+                    &source_key.0,
                     password.as_ref(),
                     1,
                     &mut master_password_hash,
@@ -33,20 +35,17 @@ impl MasterPasswordHash {
     }
 }
 
-impl From<[u8; 32]> for MasterPasswordHash {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
+impl fmt::Display for MasterPasswordHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.encode())
     }
 }
 
-impl From<MasterPasswordHash> for [u8; 32] {
-    fn from(value: MasterPasswordHash) -> [u8; 32] {
-        value.0
-    }
-}
-
-impl AsRef<[u8; 32]> for MasterPasswordHash {
-    fn as_ref(&self) -> &[u8; 32] {
-        &self.0
+impl Serialize for MasterPasswordHash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
