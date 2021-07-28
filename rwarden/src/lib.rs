@@ -258,11 +258,10 @@ impl AccessTokenData {
 ///
 /// Creating a [`Session`]:
 ///
-/// ```
+/// ```ignore
 /// use rwarden::{cache::EmptyCache, AccessTokenData, Session, Urls};
 /// use std::time::SystemTime;
 ///
-/// # let keys = rwarden::crypto::Keys::generate();
 /// let session = Session::builder()
 ///     .cache(EmptyCache)
 ///     .urls(Urls::official())
