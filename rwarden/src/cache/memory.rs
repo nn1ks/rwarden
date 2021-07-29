@@ -8,7 +8,7 @@ use std::{collections::HashSet, convert::Infallible};
 use uuid::Uuid;
 
 /// A cache that keeps the data in memory.
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct MemoryCache {
     pub account: Option<Account>,
     pub folders: Vec<Folder>,

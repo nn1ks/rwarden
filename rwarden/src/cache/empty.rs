@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use uuid::Uuid;
 
 /// A cache that does not store any data.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EmptyCache;
 
 #[async_trait]

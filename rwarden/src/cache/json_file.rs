@@ -10,7 +10,7 @@ use tokio::{fs, io};
 use uuid::Uuid;
 
 /// The data of a [`JsonFileCache`].
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct JsonFileCacheData {
     pub account: Option<Account>,
     pub folders: Vec<Folder>,
@@ -42,7 +42,7 @@ pub enum Error {
 }
 
 /// A cache that writes the data to a JSON file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct JsonFileCache {
     path: PathBuf,
 }
