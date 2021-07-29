@@ -1,6 +1,6 @@
 # rwarden
 
-Rust bindings to the Bitwarden API.
+A Bitwarden API client for Rust.
 
 ## License
 

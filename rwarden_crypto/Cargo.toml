@@ -1,6 +1,6 @@
 [package]
 name = "rwarden_crypto"
-description = "Rust bindings to the Bitwarden API (crypto crate)"
+description = "Bitwarden API client (crypto crate)"
 version = "0.0.0"
 authors = ["Niklas Sauter <niklas@n1ks.net>"]
 edition = "2018"
@@ -8,7 +8,7 @@ repository = "https://github.com/nn1ks/rwarden"
 readme = "README.md"
 license = "Apache-2.0 OR MIT"
 categories = ["cryptography"]
-keywords = ["bitwarden", "api", "bindings", "password", "manager"]
+keywords = ["bitwarden", "api", "password", "password-manager"]
 
 [dependencies]
 aes = "0.7.4"
