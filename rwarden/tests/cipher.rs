@@ -1,7 +1,7 @@
 mod common;
 
 use futures::stream::TryStreamExt;
-use rwarden::cipher::{Cipher, CipherDetails, Field, FieldType, RequestModel};
+use rwarden::cipher::{self, Cipher, CipherDetails, Field, FieldType, RequestModel};
 use rwarden::crypto::{CipherString, KdfType, MasterPasswordHash, SourceKey};
 
 fn assert_eq_cipher_except_revision_date(a: &Cipher, b: &Cipher) {
@@ -40,18 +40,18 @@ fn assert_eq_cipher_except_revision_date(a: &Cipher, b: &Cipher) {
 
 #[tokio::test]
 async fn cipher_create() {
-    let mut session = common::login().await.unwrap();
-    common::create_default_cipher(&mut session).await.unwrap();
+    let mut client = common::login().await.unwrap();
+    common::create_default_cipher(&mut client).await.unwrap();
 }
 
 #[tokio::test]
 async fn cipher_get() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    let retrieved_cipher = session
-        .get::<Cipher>()
-        .id(created_cipher.id)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    let retrieved_cipher = client
+        .send(&cipher::Get {
+            id: created_cipher.id,
+        })
         .await
         .unwrap();
     assert_eq_cipher_except_revision_date(&created_cipher, &retrieved_cipher);
@@ -59,19 +59,19 @@ async fn cipher_get() {
 
 #[tokio::test]
 async fn cipher_soft_delete() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    session
-        .delete::<Cipher>()
-        .id(created_cipher.id)
-        .soft_delete(true)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    client
+        .send(&cipher::Delete {
+            id: created_cipher.id,
+            soft_delete: true,
+        })
         .await
         .unwrap();
-    let cipher = session
-        .get::<Cipher>()
-        .id(created_cipher.id)
-        .execute()
+    let cipher = client
+        .send(&cipher::Get {
+            id: created_cipher.id,
+        })
         .await
         .unwrap();
     assert!(cipher.deleted_date.is_some());
@@ -79,19 +79,19 @@ async fn cipher_soft_delete() {
 
 #[tokio::test]
 async fn cipher_hard_delete() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    session
-        .delete::<Cipher>()
-        .id(created_cipher.id)
-        .soft_delete(false)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    client
+        .send(&cipher::Delete {
+            id: created_cipher.id,
+            soft_delete: false,
+        })
         .await
         .unwrap();
-    let cipher_result = session
-        .get::<Cipher>()
-        .id(created_cipher.id)
-        .execute()
+    let cipher_result = client
+        .send(&cipher::Get {
+            id: created_cipher.id,
+        })
         .await;
     // TODO: Check that the correct error is returned
     assert!(cipher_result.is_err());
@@ -99,46 +99,40 @@ async fn cipher_hard_delete() {
 
 #[tokio::test]
 async fn cipher_bulk_soft_delete() {
-    let mut session = common::login().await.unwrap();
-    let cipher1 = common::create_default_cipher(&mut session).await.unwrap();
-    let cipher2 = common::create_default_cipher(&mut session).await.unwrap();
-    session
-        .bulk_delete::<Cipher>()
-        .ids(vec![cipher1.id, cipher2.id])
-        .soft_delete(true)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let cipher1 = common::create_default_cipher(&mut client).await.unwrap();
+    let cipher2 = common::create_default_cipher(&mut client).await.unwrap();
+    client
+        .send(
+            &cipher::BulkDelete::builder()
+                .ids(vec![cipher1.id, cipher2.id])
+                .soft_delete(true)
+                .build(),
+        )
         .await
         .unwrap();
-    let cipher1 = session
-        .get::<Cipher>()
-        .id(cipher1.id)
-        .execute()
-        .await
-        .unwrap();
-    let cipher2 = session
-        .get::<Cipher>()
-        .id(cipher2.id)
-        .execute()
-        .await
-        .unwrap();
+    let cipher1 = client.send(&cipher::Get { id: cipher1.id }).await.unwrap();
+    let cipher2 = client.send(&cipher::Get { id: cipher2.id }).await.unwrap();
     assert!(cipher1.deleted_date.is_some());
     assert!(cipher2.deleted_date.is_some());
 }
 
 #[tokio::test]
 async fn cipher_bulk_hard_delete() {
-    let mut session = common::login().await.unwrap();
-    let cipher1 = common::create_default_cipher(&mut session).await.unwrap();
-    let cipher2 = common::create_default_cipher(&mut session).await.unwrap();
-    session
-        .bulk_delete::<Cipher>()
-        .ids(vec![cipher1.id, cipher2.id])
-        .soft_delete(false)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let cipher1 = common::create_default_cipher(&mut client).await.unwrap();
+    let cipher2 = common::create_default_cipher(&mut client).await.unwrap();
+    client
+        .send(
+            &cipher::BulkDelete::builder()
+                .ids(vec![cipher1.id, cipher2.id])
+                .soft_delete(false)
+                .build(),
+        )
         .await
         .unwrap();
-    let cipher1_result = session.get::<Cipher>().id(cipher1.id).execute().await;
-    let cipher2_result = session.get::<Cipher>().id(cipher2.id).execute().await;
+    let cipher1_result = client.send(&cipher::Get { id: cipher1.id }).await;
+    let cipher2_result = client.send(&cipher::Get { id: cipher2.id }).await;
     // TODO: Check that the correct error is returned
     assert!(cipher1_result.is_err());
     assert!(cipher2_result.is_err());
@@ -146,41 +140,38 @@ async fn cipher_bulk_hard_delete() {
 
 #[tokio::test]
 async fn cipher_modify_complete() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    let folder = common::create_default_folder(&mut session).await.unwrap();
-    let name = CipherString::encrypt_with_keys("foo2", session.keys());
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    let folder = common::create_default_folder(&mut client).await.unwrap();
+    let name = CipherString::encrypt_with_keys("foo2", client.keys());
     let ty = created_cipher.ty;
-    let notes = CipherString::encrypt_with_keys("notes...", session.keys());
+    let notes = CipherString::encrypt_with_keys("notes...", client.keys());
     let fields = vec![
         Field {
             ty: FieldType::Text,
-            name: Some(CipherString::encrypt_with_keys("field1", session.keys())),
-            value: Some(CipherString::encrypt_with_keys("value1", session.keys())),
+            name: Some(CipherString::encrypt_with_keys("field1", client.keys())),
+            value: Some(CipherString::encrypt_with_keys("value1", client.keys())),
         },
         Field {
             ty: FieldType::Hidden,
-            name: Some(CipherString::encrypt_with_keys("field2", session.keys())),
-            value: Some(CipherString::encrypt_with_keys("value2", session.keys())),
+            name: Some(CipherString::encrypt_with_keys("field2", client.keys())),
+            value: Some(CipherString::encrypt_with_keys("value2", client.keys())),
         },
         Field {
             ty: FieldType::Boolean,
-            name: Some(CipherString::encrypt_with_keys("field3", session.keys())),
-            value: Some(CipherString::encrypt_with_keys("true", session.keys())),
+            name: Some(CipherString::encrypt_with_keys("field3", client.keys())),
+            value: Some(CipherString::encrypt_with_keys("true", client.keys())),
         },
     ];
-    let cipher = session
-        .modify::<Cipher>()
-        .complete()
-        .id(created_cipher.id)
-        .request_model(
-            RequestModel::new(name.clone(), ty.clone())
+    let cipher = client
+        .send(&cipher::Modify {
+            id: created_cipher.id,
+            request_model: RequestModel::new(name.clone(), ty.clone())
                 .with_folder_id(folder.id)
                 .with_notes(notes.clone())
                 .with_fields(fields.clone())
                 .with_favorite(true),
-        )
-        .execute()
+        })
         .await
         .unwrap();
     assert_eq!(cipher.name, name);
@@ -194,22 +185,23 @@ async fn cipher_modify_complete() {
 #[tokio::test]
 #[cfg_attr(feature = "disable_vaultwarden_incompatible_tests", ignore)]
 async fn cipher_modify_partial() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    let folder = common::create_default_folder(&mut session).await.unwrap();
-    session
-        .modify::<Cipher>()
-        .partial()
-        .id(created_cipher.id)
-        .folder_id(folder.id)
-        .favorite(true)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    let folder = common::create_default_folder(&mut client).await.unwrap();
+    client
+        .send(
+            &cipher::ModifyPartial::builder()
+                .id(created_cipher.id)
+                .folder_id(folder.id)
+                .favorite(true)
+                .build(),
+        )
         .await
         .unwrap();
-    let cipher = session
-        .get::<Cipher>()
-        .id(created_cipher.id)
-        .execute()
+    let cipher = client
+        .send(&cipher::Get {
+            id: created_cipher.id,
+        })
         .await
         .unwrap();
     assert_eq!(cipher.folder_id, Some(folder.id));
@@ -220,19 +212,19 @@ async fn cipher_modify_partial() {
 
 #[tokio::test]
 async fn cipher_restore() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    session
-        .delete::<Cipher>()
-        .id(created_cipher.id)
-        .soft_delete(true)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    client
+        .send(&cipher::Delete {
+            id: created_cipher.id,
+            soft_delete: true,
+        })
         .await
         .unwrap();
-    let restored_cipher = session
-        .restore::<Cipher>()
-        .id(created_cipher.id)
-        .execute()
+    let restored_cipher = client
+        .send(&cipher::Restore {
+            id: created_cipher.id,
+        })
         .await
         .unwrap();
     assert!(restored_cipher.deleted_date.is_none());
@@ -240,20 +232,22 @@ async fn cipher_restore() {
 
 #[tokio::test]
 async fn cipher_bulk_restore() {
-    let mut session = common::login().await.unwrap();
-    let cipher1 = common::create_default_cipher(&mut session).await.unwrap();
-    let cipher2 = common::create_default_cipher(&mut session).await.unwrap();
-    session
-        .bulk_delete::<Cipher>()
-        .ids(vec![cipher1.id, cipher2.id])
-        .soft_delete(true)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let cipher1 = common::create_default_cipher(&mut client).await.unwrap();
+    let cipher2 = common::create_default_cipher(&mut client).await.unwrap();
+    client
+        .send(
+            &cipher::BulkDelete::builder()
+                .ids(vec![cipher1.id, cipher2.id])
+                .soft_delete(true)
+                .build(),
+        )
         .await
         .unwrap();
-    let ciphers = session
-        .bulk_restore::<Cipher>()
-        .ids(vec![cipher1.id, cipher2.id])
-        .execute()
+    let ciphers = client
+        .send(&cipher::BulkRestore {
+            ids: vec![cipher1.id, cipher2.id],
+        })
         .try_concat()
         .await
         .unwrap();
@@ -265,54 +259,34 @@ async fn cipher_bulk_restore() {
 
 #[tokio::test]
 async fn cipher_bulk_move() {
-    let mut session = common::login().await.unwrap();
-    let cipher1 = common::create_default_cipher(&mut session).await.unwrap();
-    let cipher2 = common::create_default_cipher(&mut session).await.unwrap();
+    let mut client = common::login().await.unwrap();
+    let cipher1 = common::create_default_cipher(&mut client).await.unwrap();
+    let cipher2 = common::create_default_cipher(&mut client).await.unwrap();
 
     // Create folder and move ciphers into it
-    let folder = common::create_default_folder(&mut session).await.unwrap();
-    session
-        .bulk_move::<Cipher>()
-        .ids(vec![cipher1.id, cipher2.id])
-        .folder_id(Some(folder.id))
-        .execute()
+    let folder = common::create_default_folder(&mut client).await.unwrap();
+    client
+        .send(&cipher::BulkMove {
+            ids: vec![cipher1.id, cipher2.id],
+            folder_id: Some(folder.id),
+        })
         .await
         .unwrap();
-    let cipher1 = session
-        .get::<Cipher>()
-        .id(cipher1.id)
-        .execute()
-        .await
-        .unwrap();
-    let cipher2 = session
-        .get::<Cipher>()
-        .id(cipher2.id)
-        .execute()
-        .await
-        .unwrap();
+    let cipher1 = client.send(&cipher::Get { id: cipher1.id }).await.unwrap();
+    let cipher2 = client.send(&cipher::Get { id: cipher2.id }).await.unwrap();
     assert_eq!(cipher1.folder_id, Some(folder.id));
     assert_eq!(cipher2.folder_id, Some(folder.id));
 
     // Move ciphers back into no folder
-    session
-        .bulk_move::<Cipher>()
-        .ids(vec![cipher1.id, cipher2.id])
-        .folder_id(None)
-        .execute()
+    client
+        .send(&cipher::BulkMove {
+            ids: vec![cipher1.id, cipher2.id],
+            folder_id: None,
+        })
         .await
         .unwrap();
-    let cipher1 = session
-        .get::<Cipher>()
-        .id(cipher1.id)
-        .execute()
-        .await
-        .unwrap();
-    let cipher2 = session
-        .get::<Cipher>()
-        .id(cipher2.id)
-        .execute()
-        .await
-        .unwrap();
+    let cipher1 = client.send(&cipher::Get { id: cipher1.id }).await.unwrap();
+    let cipher2 = client.send(&cipher::Get { id: cipher2.id }).await.unwrap();
     assert_eq!(cipher1.folder_id, None);
     assert_eq!(cipher2.folder_id, None);
 }
@@ -320,9 +294,9 @@ async fn cipher_bulk_move() {
 #[tokio::test]
 #[ignore] // This test interferes with some other tests
 async fn cipher_purge() {
-    let mut session = common::login().await.unwrap();
-    let cipher1 = common::create_default_cipher(&mut session).await.unwrap();
-    let cipher2 = common::create_default_cipher(&mut session).await.unwrap();
+    let mut client = common::login().await.unwrap();
+    let cipher1 = common::create_default_cipher(&mut client).await.unwrap();
+    let cipher2 = common::create_default_cipher(&mut client).await.unwrap();
     // TODO: KDF type and iterations should not be hardcoded here
     let source_key = SourceKey::new(
         common::EMAIL,
@@ -332,14 +306,16 @@ async fn cipher_purge() {
     );
     let master_password_hash =
         MasterPasswordHash::new(&source_key, common::PASSWORD, KdfType::Pbkdf2Sha256);
-    session
-        .purge::<Cipher>()
-        .master_password_hash(master_password_hash)
-        .execute()
+    client
+        .send(
+            &cipher::Purge::builder()
+                .master_password_hash(master_password_hash)
+                .build(),
+        )
         .await
         .unwrap();
-    let cipher1_result = session.get::<Cipher>().id(cipher1.id).execute().await;
-    let cipher2_result = session.get::<Cipher>().id(cipher2.id).execute().await;
+    let cipher1_result = client.send(&cipher::Get { id: cipher1.id }).await;
+    let cipher2_result = client.send(&cipher::Get { id: cipher2.id }).await;
     // TODO: Check that the correct error is returned
     assert!(cipher1_result.is_err());
     assert!(cipher2_result.is_err());
@@ -347,12 +323,12 @@ async fn cipher_purge() {
 
 #[tokio::test]
 async fn cipher_get_details() {
-    let mut session = common::login().await.unwrap();
-    let created_cipher = common::create_default_cipher(&mut session).await.unwrap();
-    let retrieved_cipher = session
-        .get::<CipherDetails>()
-        .id(created_cipher.id)
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
+    let retrieved_cipher = client
+        .send(&cipher::GetDetails {
+            id: created_cipher.id,
+        })
         .await
         .unwrap();
     assert_eq_cipher_except_revision_date(&created_cipher, &retrieved_cipher.inner)
@@ -360,10 +336,9 @@ async fn cipher_get_details() {
 
 #[tokio::test]
 async fn cipher_get_all_details() {
-    let mut session = common::login().await.unwrap();
-    session
-        .get_all::<CipherDetails>()
-        .execute()
+    let mut client = common::login().await.unwrap();
+    let _ciphers: Vec<CipherDetails> = client
+        .send(&cipher::GetAllDetails)
         .try_concat()
         .await
         .unwrap();

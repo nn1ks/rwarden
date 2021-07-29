@@ -9,7 +9,7 @@ use uuid::Uuid;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct EmptyCache;
 
-#[async_trait(?Send)]
+#[async_trait]
 impl Cache for EmptyCache {
     type Error = Infallible;
 
@@ -23,42 +23,42 @@ impl Cache for EmptyCache {
 
     async fn save_ciphers<'a, I>(&mut self, _values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a CipherDetails>,
+        I: IntoIterator<Item = &'a CipherDetails> + Send,
     {
         Ok(())
     }
 
     async fn delete_ciphers<I>(&mut self, _ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         Ok(())
     }
 
     async fn save_folders<'a, I>(&mut self, _values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a Folder>,
+        I: IntoIterator<Item = &'a Folder> + Send,
     {
         Ok(())
     }
 
     async fn delete_folders<I>(&mut self, _ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         Ok(())
     }
 
     async fn save_collections<'a, I>(&mut self, _values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a CollectionDetails>,
+        I: IntoIterator<Item = &'a CollectionDetails> + Send,
     {
         Ok(())
     }
 
     async fn delete_collections<I>(&mut self, _ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         Ok(())
     }

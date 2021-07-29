@@ -1,11 +1,13 @@
 //! Module for collection resources.
 
-use crate::{crypto::CipherString, Create, Delete, Get, GetAll, Modify};
+use crate::crypto::CipherString;
 use derive_setters::Setters;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub mod request;
+pub use request::*;
+
+mod request;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -46,26 +48,6 @@ pub struct Collection {
     pub external_id: Uuid,
 }
 
-impl<'session, TCache: 'session> Get<'session, TCache> for Collection {
-    type Request = request::DefaultGet<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> GetAll<'session, TCache> for Collection {
-    type Request = request::DefaultGetAll<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Create<'session, TCache> for Collection {
-    type Request = request::DefaultCreate<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Delete<'session, TCache> for Collection {
-    type Request = request::DefaultDelete<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Modify<'session, TCache> for Collection {
-    type Request = request::DefaultModify<'session, TCache>;
-}
-
 /// A collection resource with additional information.
 // NOTE: Serialize is only needed for cache
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -77,10 +59,6 @@ pub struct CollectionDetails {
     pub hide_passwords: bool,
 }
 
-impl<'session, TCache: 'session> GetAll<'session, TCache> for CollectionDetails {
-    type Request = request::GetAllDetails<'session, TCache>;
-}
-
 /// A collection resource with additional information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -90,22 +68,6 @@ pub struct CollectionGroupDetails {
     pub groups: Vec<SelectionReadOnly>,
 }
 
-impl<'session, TCache: 'session> Get<'session, TCache> for CollectionGroupDetails {
-    type Request = request::DefaultGetGroupDetails<'session, TCache>;
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Users(pub Vec<SelectionReadOnly>);
-
-impl<'session, TCache: 'session> Get<'session, TCache> for Users {
-    type Request = request::DefaultGetUsers<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Delete<'session, TCache> for Users {
-    type Request = request::DefaultDeleteUser<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Modify<'session, TCache> for Users {
-    type Request = request::DefaultModifyUsers<'session, TCache>;
-}

@@ -19,8 +19,10 @@ use util::ResponseExt;
 pub use error::{Error, RequestResponseError};
 pub use rwarden_crypto as crypto;
 
-mod error;
+#[macro_use]
 mod util;
+
+mod error;
 
 pub mod account;
 pub mod cache;
@@ -102,12 +104,12 @@ struct Prelogin {
 
 /// A client used for logging in and registering users.
 #[derive(Debug, Clone)]
-pub struct Client {
+pub struct AnonymousClient {
     urls: Urls,
     client: reqwest::Client,
 }
 
-impl Client {
+impl AnonymousClient {
     pub fn new(urls: Urls) -> Self {
         Self {
             urls,
@@ -136,7 +138,7 @@ impl Client {
         self,
         data: &LoginData,
         cache: TCache,
-    ) -> Result<Session<TCache>, TCache::Error> {
+    ) -> Result<Client<TCache>, TCache::Error> {
         let Prelogin {
             kdf_type,
             kdf_iterations,
@@ -185,7 +187,7 @@ impl Client {
             .parse::<TokenResponse>()
             .await?;
         let keys = crypto::Keys::new(&source_key, &token.key)?;
-        Ok(Session {
+        Ok(Client {
             client: self.client,
             cache,
             urls: self.urls,
@@ -252,17 +254,17 @@ impl AccessTokenData {
     }
 }
 
-/// A session used for interacting with the Bitwarden API.
+/// A client used for interacting with the Bitwarden API.
 ///
 /// # Example
 ///
-/// Creating a [`Session`]:
+/// Creating a [`Client`]:
 ///
 /// ```ignore
-/// use rwarden::{cache::EmptyCache, AccessTokenData, Session, Urls};
+/// use rwarden::{cache::EmptyCache, AccessTokenData, Client, Urls};
 /// use std::time::SystemTime;
 ///
-/// let session = Session::builder()
+/// let client = Client::builder()
 ///     .cache(EmptyCache)
 ///     .urls(Urls::official())
 ///     .keys(keys)
@@ -274,7 +276,7 @@ impl AccessTokenData {
 ///     .build();
 /// ```
 #[derive(Debug, Clone, TypedBuilder)]
-pub struct Session<TCache> {
+pub struct Client<TCache> {
     #[builder(default, setter(skip))]
     client: reqwest::Client,
     cache: TCache,
@@ -286,7 +288,7 @@ pub struct Session<TCache> {
     access_token_data: Option<AccessTokenData>,
 }
 
-impl<TCache> Session<TCache> {
+impl<TCache> Client<TCache> {
     /// Returns a shared reference to the cache.
     pub fn cache(&self) -> &TCache {
         &self.cache
@@ -354,7 +356,7 @@ impl<TCache> Session<TCache> {
 
     /// Sends a token to the given email address that can be used to change the email address.
     ///
-    /// To change the email address with the token, [`account::request::ModifyEmail`] can be used.
+    /// To change the email address with the token, [`account::ModifyEmail`] can be used.
     pub async fn send_email_modification_token<S: AsRef<str>>(
         &mut self,
         new_email: S,
@@ -378,7 +380,7 @@ impl<TCache> Session<TCache> {
 
     /// Sends a token to this users email address that can be used to verify the email address.
     ///
-    /// To verify the email address with the token, the [`Session::verify_email`] function can be
+    /// To verify the email address with the token, the [`Client::verify_email`] function can be
     /// used.
     pub async fn send_email_verification_token(&mut self) -> StdResult<(), RequestResponseError> {
         self.request(
@@ -395,10 +397,10 @@ impl<TCache> Session<TCache> {
 
     pub async fn verify_email<S>(&mut self, token: S) -> Result<(), TCache::Error>
     where
-        TCache: Cache,
+        TCache: Cache + Send,
         S: AsRef<str>,
     {
-        let account = self.get::<account::Account>().execute().await?;
+        let account = self.send(&account::Get).await?;
         self.client
             .request(
                 Method::POST,
@@ -429,88 +431,11 @@ impl<TCache> Session<TCache> {
         Ok(())
     }
 
-    pub fn get<'session, G>(&'session mut self) -> G::Request
+    pub fn send<'request, 'client, R>(&'client mut self, request: &'request R) -> R::Output
     where
-        G: Get<'session, TCache>,
+        R: Request<'request, 'client, TCache>,
     {
-        G::get(self)
-    }
-
-    pub fn get_all<'session, G>(&'session mut self) -> G::Request
-    where
-        G: GetAll<'session, TCache>,
-    {
-        G::get_all(self)
-    }
-
-    pub fn create<'session, C>(&'session mut self) -> C::Request
-    where
-        C: Create<'session, TCache>,
-    {
-        C::create(self)
-    }
-
-    pub fn delete<'session, D>(&'session mut self) -> D::Request
-    where
-        D: Delete<'session, TCache>,
-    {
-        D::delete(self)
-    }
-
-    pub fn bulk_delete<'session, D>(&'session mut self) -> D::Request
-    where
-        D: BulkDelete<'session, TCache>,
-    {
-        D::bulk_delete(self)
-    }
-
-    pub fn restore<'session, R>(&'session mut self) -> R::Request
-    where
-        R: Restore<'session, TCache>,
-    {
-        R::restore(self)
-    }
-
-    pub fn bulk_restore<'session, R>(&'session mut self) -> R::Request
-    where
-        R: BulkRestore<'session, TCache>,
-    {
-        R::bulk_restore(self)
-    }
-
-    pub fn modify<'session, M>(&'session mut self) -> M::Request
-    where
-        M: Modify<'session, TCache>,
-    {
-        M::modify(self)
-    }
-
-    pub fn share<'session, S>(&'session mut self) -> S::Request
-    where
-        S: Share<'session, TCache>,
-    {
-        S::share(self)
-    }
-
-    pub fn bulk_share<'session, S>(&'session mut self) -> S::Request
-    where
-        S: BulkShare<'session, TCache>,
-    {
-        S::bulk_share(self)
-    }
-
-    pub fn bulk_move<'session, M>(&'session mut self) -> M::Request
-    where
-        M: BulkMove<'session, TCache>,
-    {
-        M::bulk_move(self)
-    }
-
-    pub fn purge<'session, P>(&'session mut self) -> P::Request
-    where
-        P: Purge<'session, TCache>,
-    {
-        P::purge(self)
+        request.send(self)
     }
 }
 
@@ -664,103 +589,7 @@ impl RegisterData {
     }
 }
 
-/// Trait for request types.
-pub trait Request<'session, TCache> {
-    fn new(session: &'session mut Session<TCache>) -> Self;
-}
-
-/// Trait for getting a resource.
-pub trait Get<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn get(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for getting all resources of a type.
-pub trait GetAll<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn get_all(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for creating a resource.
-pub trait Create<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn create(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for deleting a resource.
-pub trait Delete<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn delete(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for deleting multiple resources of a type.
-pub trait BulkDelete<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn bulk_delete(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for modifying a resource.
-pub trait Modify<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn modify(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for restoring a resource.
-pub trait Restore<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn restore(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for restoring multiple resources of a type.
-pub trait BulkRestore<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn bulk_restore(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for sharing a resource.
-pub trait Share<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn share(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for sharing multiple resources of a type.
-pub trait BulkShare<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn bulk_share(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for moving multiple resources of a type.
-pub trait BulkMove<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn bulk_move(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
-}
-
-/// Trait for purging resources.
-pub trait Purge<'session, TCache: 'session> {
-    type Request: Request<'session, TCache>;
-    fn purge(session: &'session mut Session<TCache>) -> Self::Request {
-        Self::Request::new(session)
-    }
+pub trait Request<'request, 'client, TCache> {
+    type Output;
+    fn send(&'request self, client: &'client mut Client<TCache>) -> Self::Output;
 }

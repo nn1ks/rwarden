@@ -73,7 +73,7 @@ impl JsonFileCache {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl Cache for JsonFileCache {
     type Error = Error;
 
@@ -88,7 +88,7 @@ impl Cache for JsonFileCache {
 
     async fn save_ciphers<'a, I>(&mut self, values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a CipherDetails>,
+        I: IntoIterator<Item = &'a CipherDetails> + Send,
     {
         self.modify_data(|data| data.ciphers.extend(values.into_iter().cloned()))
             .await
@@ -96,7 +96,7 @@ impl Cache for JsonFileCache {
 
     async fn delete_ciphers<I>(&mut self, ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         self.modify_data(|data| {
             let ids = ids.into_iter().collect::<HashSet<_>>();
@@ -107,7 +107,7 @@ impl Cache for JsonFileCache {
 
     async fn save_folders<'a, I>(&mut self, values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a Folder>,
+        I: IntoIterator<Item = &'a Folder> + Send,
     {
         self.modify_data(|data| data.folders.extend(values.into_iter().cloned()))
             .await
@@ -115,7 +115,7 @@ impl Cache for JsonFileCache {
 
     async fn delete_folders<I>(&mut self, ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         self.modify_data(|data| {
             let ids = ids.into_iter().collect::<HashSet<_>>();
@@ -126,7 +126,7 @@ impl Cache for JsonFileCache {
 
     async fn save_collections<'a, I>(&mut self, values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a CollectionDetails>,
+        I: IntoIterator<Item = &'a CollectionDetails> + Send,
     {
         self.modify_data(|data| data.collections.extend(values.into_iter().cloned()))
             .await
@@ -134,7 +134,7 @@ impl Cache for JsonFileCache {
 
     async fn delete_collections<I>(&mut self, ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         self.modify_data(|data| {
             let ids = ids.into_iter().collect::<HashSet<_>>();

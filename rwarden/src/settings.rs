@@ -1,9 +1,10 @@
 //! Module for settings.
 
-use crate::{Get, Modify};
 use serde::{Deserialize, Serialize};
 
-pub mod request;
+pub use request::*;
+
+mod request;
 
 /// Multiple equivalent domains.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -35,14 +36,6 @@ impl Domains {
     }
 }
 
-impl<'session, TCache: 'session> Get<'session, TCache> for Domains {
-    type Request = request::GetDomains<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Modify<'session, TCache> for Domains {
-    type Request = request::DefaultModifyDomains<'session, TCache>;
-}
-
 /// Multiple globally equivalent domains.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -54,6 +47,7 @@ pub struct GlobalEquivalentDomains {
 }
 
 // https://github.com/bitwarden/server/blob/v1.40.0/src/Core/Enums/GlobalEquivalentDomainsType.cs
+/// The type of global equivalent domains.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct GlobalEquivalentDomainsType(pub u8);

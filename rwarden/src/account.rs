@@ -1,10 +1,12 @@
 //! Module for account resources.
 
-use crate::{crypto::CipherString, Get, Modify};
+use crate::crypto::CipherString;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub mod request;
+pub use request::*;
+
+mod request;
 
 /// An account resource.
 // NOTE: Serialize is only needed for cache
@@ -23,12 +25,4 @@ pub struct Account {
     pub private_key: Option<CipherString>,
     pub security_stamp: String,
     // pub organizations: Vec<Organization>, // TODO
-}
-
-impl<'session, TCache: 'session> Get<'session, TCache> for Account {
-    type Request = request::Get<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Modify<'session, TCache> for Account {
-    type Request = request::Modify<'session, TCache>;
 }

@@ -1,9 +1,6 @@
 //! Module for cipher resources.
 
-use crate::{
-    cache::Cache, util, BulkDelete, BulkMove, BulkRestore, BulkShare, CipherString, Create, Delete,
-    Get, GetAll, Modify, Purge, Restore, Share,
-};
+use crate::{crypto::CipherString, util};
 use chrono::{DateTime, FixedOffset};
 use derive_setters::Setters;
 use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
@@ -11,7 +8,9 @@ use serde_repr::{Deserialize_repr as DeserializeRepr, Serialize_repr as Serializ
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub mod request;
+pub use request::*;
+
+mod request;
 
 /// The type of a custom field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, DeserializeRepr, SerializeRepr)]
@@ -48,7 +47,7 @@ pub struct PasswordHistoryEntry {
 /// An attachment of a cipher.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Attachment {
+pub struct AttachmentRequest {
     /// The file name of the attachment.
     pub file_name: CipherString,
     /// The key of the attachment.
@@ -70,7 +69,7 @@ pub struct RequestModel {
     pub fields: Vec<Field>,
     pub favorite: bool,
     pub password_history: Vec<PasswordHistoryEntry>,
-    pub attachments: HashMap<String, Attachment>,
+    pub attachments: HashMap<Uuid, AttachmentRequest>,
     pub last_known_revision_date: Option<DateTime<FixedOffset>>,
 }
 
@@ -87,6 +86,35 @@ impl RequestModel {
             password_history: Vec::new(),
             attachments: HashMap::new(),
             last_known_revision_date: None,
+        }
+    }
+}
+
+impl From<Cipher> for RequestModel {
+    fn from(cipher: Cipher) -> Self {
+        Self {
+            folder_id: cipher.folder_id,
+            organization_id: cipher.organization_id,
+            name: cipher.name,
+            ty: cipher.ty,
+            notes: cipher.notes,
+            fields: cipher.fields,
+            favorite: cipher.favorite,
+            password_history: cipher.password_history,
+            attachments: cipher
+                .attachments
+                .into_iter()
+                .map(|attachment| {
+                    (
+                        attachment.id,
+                        AttachmentRequest {
+                            file_name: attachment.file_name,
+                            key: attachment.key,
+                        },
+                    )
+                })
+                .collect(),
+            last_known_revision_date: Some(cipher.revision_date),
         }
     }
 }
@@ -323,6 +351,19 @@ enum SecureNoteType {
     Generic = 0,
 }
 
+/// An attachment of a cipher.
+// NOTE: Serialize is only needed for cache
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Attachment {
+    pub id: Uuid,
+    pub url: String,
+    pub file_name: CipherString,
+    pub key: CipherString,
+    pub size: String,
+    pub size_name: String,
+}
+
 // https://github.com/bitwarden/server/blob/v1.40.0/src/Core/Models/Api/Response/CipherResponseModel.cs
 /// A cipher resource.
 // NOTE: Serialize is only needed for cache
@@ -350,50 +391,6 @@ pub struct Cipher {
     pub view_password: bool,
 }
 
-impl<'session, TCache: 'session> Get<'session, TCache> for Cipher {
-    type Request = request::DefaultGet<'session, TCache>;
-}
-
-impl<'session, TCache: Cache + 'session> Create<'session, TCache> for Cipher {
-    type Request = request::DefaultCreate<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Delete<'session, TCache> for Cipher {
-    type Request = request::DefaultDelete<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> BulkDelete<'session, TCache> for Cipher {
-    type Request = request::DefaultBulkDelete<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Modify<'session, TCache> for Cipher {
-    type Request = request::Modify<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Restore<'session, TCache> for Cipher {
-    type Request = request::DefaultRestore<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> BulkRestore<'session, TCache> for Cipher {
-    type Request = request::DefaultBulkRestore<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Share<'session, TCache> for Cipher {
-    type Request = request::DefaultShare<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> BulkShare<'session, TCache> for Cipher {
-    type Request = request::DefaultBulkShare<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> BulkMove<'session, TCache> for Cipher {
-    type Request = request::DefaultBulkMove<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> Purge<'session, TCache> for Cipher {
-    type Request = request::DefaultPurge<'session, TCache>;
-}
-
 /// A cipher resource with additional information.
 // NOTE: Serialize is only needed for cache
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -403,12 +400,4 @@ pub struct CipherDetails {
     pub inner: Cipher,
     #[serde(deserialize_with = "util::deserialize_optional")]
     pub collection_ids: Vec<Uuid>,
-}
-
-impl<'session, TCache: 'session> Get<'session, TCache> for CipherDetails {
-    type Request = request::DefaultGetDetails<'session, TCache>;
-}
-
-impl<'session, TCache: 'session> GetAll<'session, TCache> for CipherDetails {
-    type Request = request::GetAllDetails<'session, TCache>;
 }

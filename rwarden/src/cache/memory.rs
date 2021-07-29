@@ -18,7 +18,7 @@ pub struct MemoryCache {
     pub domains: Option<Domains>,
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl Cache for MemoryCache {
     type Error = Infallible;
 
@@ -34,7 +34,7 @@ impl Cache for MemoryCache {
 
     async fn save_ciphers<'a, I>(&mut self, values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a CipherDetails>,
+        I: IntoIterator<Item = &'a CipherDetails> + Send,
     {
         self.ciphers.extend(values.into_iter().cloned());
         Ok(())
@@ -42,7 +42,7 @@ impl Cache for MemoryCache {
 
     async fn delete_ciphers<I>(&mut self, ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         let ids = ids.into_iter().collect::<HashSet<_>>();
         self.ciphers.retain(|v| !ids.contains(&v.inner.id));
@@ -51,7 +51,7 @@ impl Cache for MemoryCache {
 
     async fn save_folders<'a, I>(&mut self, values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a Folder>,
+        I: IntoIterator<Item = &'a Folder> + Send,
     {
         self.folders.extend(values.into_iter().cloned());
         Ok(())
@@ -59,7 +59,7 @@ impl Cache for MemoryCache {
 
     async fn delete_folders<I>(&mut self, ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         let ids = ids.into_iter().collect::<HashSet<_>>();
         self.folders.retain(|v| !ids.contains(&v.id));
@@ -68,7 +68,7 @@ impl Cache for MemoryCache {
 
     async fn save_collections<'a, I>(&mut self, values: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = &'a CollectionDetails>,
+        I: IntoIterator<Item = &'a CollectionDetails> + Send,
     {
         self.collections.extend(values.into_iter().cloned());
         Ok(())
@@ -76,7 +76,7 @@ impl Cache for MemoryCache {
 
     async fn delete_collections<I>(&mut self, ids: I) -> Result<(), Self::Error>
     where
-        I: IntoIterator<Item = Uuid>,
+        I: IntoIterator<Item = Uuid> + Send,
     {
         let ids = ids.into_iter().collect::<HashSet<_>>();
         self.collections.retain(|v| !ids.contains(&v.inner.id));

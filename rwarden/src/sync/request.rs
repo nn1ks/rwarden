@@ -1,33 +1,29 @@
-use crate::{cache::Cache, sync::Sync, util::ResponseExt, Error, Request, Session};
+use crate::{cache::Cache, sync::Sync, util::ResponseExt, Client, Error, Request};
+use futures::future::BoxFuture;
 use reqwest::Method;
 
-#[derive(Debug)]
-pub struct Get<'session, TCache> {
-    session: &'session mut Session<TCache>,
-}
+/// A [`Request`] for retrieving synchronization response.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Get;
 
-impl<'session, TCache> Request<'session, TCache> for Get<'session, TCache> {
-    fn new(session: &'session mut Session<TCache>) -> Self {
-        Self { session }
-    }
-}
-
-impl<'session, TCache: Cache> Get<'session, TCache> {
-    pub async fn execute(&mut self) -> crate::Result<Sync, TCache::Error> {
-        let value = self
-            .session
-            .request(Method::GET, format!("{}/sync", self.session.urls().base))
-            .await?
-            .query(&[("excludeDomains", false)])
-            .send()
-            .await?
-            .parse()
-            .await?;
-        self.session
-            .cache_mut()
-            .sync(&value)
-            .await
-            .map_err(Error::Cache)?;
-        Ok(value)
+impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'client, TCache> for Get {
+    type Output = BoxFuture<'request, crate::Result<Sync, TCache::Error>>;
+    fn send(&'request self, client: &'client mut Client<TCache>) -> Self::Output {
+        Box::pin(async move {
+            let value = client
+                .request(Method::GET, format!("{}/sync", client.urls().base))
+                .await?
+                .query(&[("excludeDomains", false)])
+                .send()
+                .await?
+                .parse()
+                .await?;
+            client
+                .cache_mut()
+                .sync(&value)
+                .await
+                .map_err(Error::Cache)?;
+            Ok(value)
+        })
     }
 }

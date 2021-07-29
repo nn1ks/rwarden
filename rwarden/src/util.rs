@@ -44,3 +44,30 @@ pub struct ListResponse<T> {
     pub data: Vec<T>,
     pub continuation_token: Option<String>,
 }
+
+macro_rules! request_stream {
+    ($build_request:expr, $response:ident => $save_cache:expr) => {
+        Box::pin(async_stream::try_stream! {
+            let mut continuation_token = None;
+            let mut is_first_iteration = true;
+            while continuation_token.is_some() || is_first_iteration {
+                let mut request = $build_request;
+                if let Some(v) = &continuation_token {
+                    request = request.query(&[("continuationToken", v)])
+                }
+                let $response = request
+                    .send()
+                    .await?
+                    .parse::<crate::util::ListResponse<_>>()
+                    .await?;
+                $save_cache;
+                continuation_token = $response.continuation_token;
+                is_first_iteration = false;
+                yield $response.data;
+            }
+        })
+    };
+    ($build_request:expr) => {
+        request_stream! { $build_request, response => {} }
+    };
+}

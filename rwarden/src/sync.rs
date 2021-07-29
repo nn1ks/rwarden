@@ -2,11 +2,13 @@
 
 use crate::{
     account::Account, cipher::CipherDetails, collection::CollectionDetails, folder::Folder,
-    settings::Domains, Get,
+    settings::Domains,
 };
 use serde::Deserialize;
 
-pub mod request;
+pub use request::*;
+
+mod request;
 
 /// A synchronization response.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
@@ -20,8 +22,4 @@ pub struct Sync {
     // pub policies: Vec<Policy>,
     // pub sends: Vec<Send>,
     pub domains: Domains,
-}
-
-impl<'session, TCache: 'session> Get<'session, TCache> for Sync {
-    type Request = request::Get<'session, TCache>;
 }
