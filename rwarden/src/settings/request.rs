@@ -2,7 +2,7 @@ use crate::settings::{Domains, EquivalentDomains, GlobalEquivalentDomainsType};
 use crate::{cache::Cache, util::ResponseExt, Client, Error, Request};
 use futures::future::BoxFuture;
 use reqwest::Method;
-use serde_json::json;
+use serde::Serialize;
 use typed_builder::TypedBuilder;
 
 /// A [`Request`] for retrieving domain settings.
@@ -36,10 +36,11 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
 }
 
 /// A [`Request`] for modifying domain settings.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, TypedBuilder)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, TypedBuilder)]
+#[serde(rename_all = "PascalCase")]
 pub struct ModifyDomains {
-    equivalent_domains: Vec<EquivalentDomains>,
-    global_equivalent_domains: Vec<GlobalEquivalentDomainsType>,
+    pub equivalent_domains: Vec<EquivalentDomains>,
+    pub excluded_global_equivalent_domains: Vec<GlobalEquivalentDomainsType>,
 }
 
 impl ModifyDomains {
@@ -56,6 +57,7 @@ impl ModifyDomains {
                 (domains
                     .global_equivalent_domains
                     .into_iter()
+                    .filter(|v| v.excluded)
                     .map(|v| v.ty)
                     .collect(),),
             ),
@@ -76,10 +78,7 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
                     format!("{}/settings/domains", client.urls().base),
                 )
                 .await?
-                .json(&json!({
-                    "EquivalentDomains": self.equivalent_domains,
-                    "GlobalEquivalentDomains": self.global_equivalent_domains,
-                }))
+                .json(self)
                 .send()
                 .await?
                 .parse()
