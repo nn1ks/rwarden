@@ -1,27 +1,28 @@
-// #![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 #![warn(rust_2018_idioms, missing_debug_implementations)]
 
 use derive_setters::Setters;
-use reqwest::{header, IntoUrl, Method, RequestBuilder};
-use rwarden_crypto::{CipherString, Keys, MasterPasswordHash};
+use reqwest::Method;
+use rwarden_crypto::CipherString;
 use serde::Deserialize;
 use serde_json::json;
 use serde_repr::Serialize_repr as SerializeRepr;
-use std::time::{Duration, SystemTime};
-use std::{collections::HashMap, convert::TryInto, result::Result as StdResult};
-use typed_builder::TypedBuilder;
+use std::time::SystemTime;
+use std::{collections::HashMap, result::Result as StdResult};
 use url::Url;
 use uuid::Uuid;
 
 use cache::Cache;
 use util::ResponseExt;
 
+pub use client::Client;
 pub use error::{Error, RequestResponseError};
 pub use rwarden_crypto as crypto;
 
 #[macro_use]
 mod util;
 
+mod client;
 mod error;
 
 pub mod account;
@@ -195,7 +196,7 @@ impl AnonymousClient {
             refresh_token: token.refresh_token,
             access_token_data: Some(AccessTokenData {
                 access_token: token.access_token,
-                expiry_time: get_token_expiry_time(token.expires_in),
+                expiry_time: util::get_token_expiry_time(token.expires_in),
             }),
         })
     }
@@ -234,13 +235,6 @@ impl AnonymousClient {
     }
 }
 
-fn get_token_expiry_time(expires_in: Option<i64>) -> SystemTime {
-    SystemTime::now()
-        + expires_in
-            .map(|v| v.try_into().map(Duration::from_secs).unwrap_or_default())
-            .unwrap_or_default()
-}
-
 /// An access token and its expiry time.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccessTokenData {
@@ -251,191 +245,6 @@ pub struct AccessTokenData {
 impl AccessTokenData {
     fn token_has_expired(&self) -> bool {
         self.expiry_time < SystemTime::now()
-    }
-}
-
-/// A client used for interacting with the Bitwarden API.
-///
-/// # Example
-///
-/// Creating a [`Client`]:
-///
-/// ```ignore
-/// use rwarden::{cache::EmptyCache, AccessTokenData, Client, Urls};
-/// use std::time::SystemTime;
-///
-/// let client = Client::builder()
-///     .cache(EmptyCache)
-///     .urls(Urls::official())
-///     .keys(keys)
-///     .refresh_token("foo")
-///     .access_token_data(AccessTokenData { // optional
-///         access_token: "bar".to_owned(),
-///         expiry_time: SystemTime::now(),
-///     })
-///     .build();
-/// ```
-#[derive(Debug, Clone, TypedBuilder)]
-pub struct Client<TCache> {
-    #[builder(default, setter(skip))]
-    client: reqwest::Client,
-    cache: TCache,
-    urls: Urls,
-    keys: Keys,
-    #[builder(setter(into))]
-    refresh_token: String,
-    #[builder(default, setter(strip_option))]
-    access_token_data: Option<AccessTokenData>,
-}
-
-impl<TCache> Client<TCache> {
-    /// Returns a shared reference to the cache.
-    pub fn cache(&self) -> &TCache {
-        &self.cache
-    }
-
-    /// Returns a mutable reference to the cache.
-    pub fn cache_mut(&mut self) -> &mut TCache {
-        &mut self.cache
-    }
-
-    /// Returns the URLs of the API endpoints.
-    pub fn urls(&self) -> &Urls {
-        &self.urls
-    }
-
-    /// Returns the keys.
-    pub fn keys(&self) -> &Keys {
-        &self.keys
-    }
-
-    async fn request<S>(
-        &mut self,
-        method: Method,
-        url: S,
-    ) -> StdResult<RequestBuilder, RequestResponseError>
-    where
-        S: IntoUrl,
-    {
-        let refresh_access_token = match &self.access_token_data {
-            Some(v) if v.token_has_expired() => true,
-            None => true,
-            Some(_) => false,
-        };
-        if refresh_access_token {
-            self.refresh_access_token().await?;
-        }
-        // `unwrap` is safe here because the `refresh_access_token` function sets the access token
-        let access_token = &self.access_token_data.as_ref().unwrap().access_token;
-        Ok(self
-            .client
-            .request(method, url)
-            .header(header::AUTHORIZATION, format!("Bearer {}", access_token)))
-    }
-
-    /// Refreshes the access token.
-    async fn refresh_access_token(&mut self) -> StdResult<(), RequestResponseError> {
-        let token = self
-            .client
-            .request(Method::POST, self.urls.auth.clone())
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("refresh_token", &self.refresh_token),
-            ])
-            .send()
-            .await?
-            .parse::<TokenResponse>()
-            .await?;
-        self.refresh_token = token.refresh_token;
-        self.access_token_data = Some(AccessTokenData {
-            access_token: token.access_token,
-            expiry_time: get_token_expiry_time(token.expires_in),
-        });
-        Ok(())
-    }
-
-    /// Sends a token to the given email address that can be used to change the email address.
-    ///
-    /// To change the email address with the token, [`account::ModifyEmail`] can be used.
-    pub async fn send_email_modification_token<S: AsRef<str>>(
-        &mut self,
-        new_email: S,
-        master_password_hash: &MasterPasswordHash,
-    ) -> StdResult<(), RequestResponseError> {
-        self.request(
-            Method::POST,
-            format!("{}/accounts/email-token", self.urls().base),
-        )
-        .await?
-        .json(&json!({
-            "NewEmail": new_email.as_ref(),
-            "MasterPasswordHash": master_password_hash
-        }))
-        .send()
-        .await?
-        .parse_empty()
-        .await?;
-        Ok(())
-    }
-
-    /// Sends a token to this users email address that can be used to verify the email address.
-    ///
-    /// To verify the email address with the token, the [`Client::verify_email`] function can be
-    /// used.
-    pub async fn send_email_verification_token(&mut self) -> StdResult<(), RequestResponseError> {
-        self.request(
-            Method::POST,
-            format!("{}/accounts/verify-email", self.urls().base),
-        )
-        .await?
-        .send()
-        .await?
-        .parse_empty()
-        .await?;
-        Ok(())
-    }
-
-    pub async fn verify_email<S>(&mut self, token: S) -> Result<(), TCache::Error>
-    where
-        TCache: Cache + Send,
-        S: AsRef<str>,
-    {
-        let account = self.send(&account::Get).await?;
-        self.client
-            .request(
-                Method::POST,
-                format!("{}/accounts/verify-email-token", self.urls().base),
-            )
-            .json(&json!({ "UserId": account.id, "Token": token.as_ref() }))
-            .send()
-            .await?
-            .parse_empty()
-            .await?;
-        Ok(())
-    }
-
-    pub async fn verify_password(
-        &mut self,
-        master_password_hash: &MasterPasswordHash,
-    ) -> Result<(), RequestResponseError> {
-        self.request(
-            Method::POST,
-            format!("{}/accounts/verify-password", self.urls().base),
-        )
-        .await?
-        .json(&json!({ "MasterPasswordHash": master_password_hash }))
-        .send()
-        .await?
-        .parse_empty()
-        .await?;
-        Ok(())
-    }
-
-    pub fn send<'request, 'client, R>(&'client mut self, request: &'request R) -> R::Output
-    where
-        R: Request<'request, 'client, TCache>,
-    {
-        request.send(self)
     }
 }
 

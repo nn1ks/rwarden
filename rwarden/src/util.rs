@@ -1,6 +1,8 @@
 use crate::{response, RequestResponseError};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
+use std::convert::TryInto;
+use std::time::{Duration, SystemTime};
 
 pub fn deserialize_optional<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
@@ -9,6 +11,13 @@ where
 {
     let value: Option<T> = Deserialize::deserialize(deserializer)?;
     Ok(value.unwrap_or_default())
+}
+
+pub fn get_token_expiry_time(expires_in: Option<i64>) -> SystemTime {
+    SystemTime::now()
+        + expires_in
+            .map(|v| v.try_into().map(Duration::from_secs).unwrap_or_default())
+            .unwrap_or_default()
 }
 
 #[async_trait]
