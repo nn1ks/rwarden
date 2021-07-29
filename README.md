@@ -2,6 +2,11 @@
 
 A Bitwarden API client for Rust.
 
+This project is not associated with the [Bitwarden](https://bitwarden.com) project nor 8bit Solutions
+LLC.
+
+## [Documentation](https://docs.rs/rwarden)
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0] or [MIT License] at your option.
