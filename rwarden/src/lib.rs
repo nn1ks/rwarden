@@ -2,20 +2,12 @@
 #![warn(rust_2018_idioms, missing_debug_implementations)]
 
 use derive_setters::Setters;
-use reqwest::Method;
-use rwarden_crypto::CipherString;
-use serde::Deserialize;
-use serde_json::json;
 use serde_repr::Serialize_repr as SerializeRepr;
-use std::time::SystemTime;
-use std::{collections::HashMap, result::Result as StdResult};
+use std::{result::Result as StdResult, time::SystemTime};
 use url::Url;
 use uuid::Uuid;
 
-use cache::Cache;
-use util::ResponseExt;
-
-pub use client::Client;
+pub use client::{AnonymousClient, Client, ClientBuilder};
 pub use error::{Error, RequestResponseError};
 pub use rwarden_crypto as crypto;
 
@@ -36,6 +28,11 @@ pub mod sync;
 
 /// Type alias for `Result<TOk, Error<TCacheError>>`.
 pub type Result<TOk, TCacheError> = StdResult<TOk, Error<TCacheError>>;
+
+pub trait Request<'request, 'client, TCache> {
+    type Output;
+    fn send(&'request self, client: &'client mut Client<TCache>) -> Self::Output;
+}
 
 /// Struct for specifying the URLs of API endpoints.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -95,146 +92,6 @@ impl Urls {
     }
 }
 
-#[derive(Deserialize)]
-struct Prelogin {
-    #[serde(rename = "Kdf")]
-    kdf_type: crypto::KdfType,
-    #[serde(rename = "KdfIterations")]
-    kdf_iterations: u32,
-}
-
-/// A client used for logging in and registering users.
-#[derive(Debug, Clone)]
-pub struct AnonymousClient {
-    urls: Urls,
-    client: reqwest::Client,
-}
-
-impl AnonymousClient {
-    pub fn new(urls: Urls) -> Self {
-        Self {
-            urls,
-            client: reqwest::Client::new(),
-        }
-    }
-
-    pub fn urls(&self) -> &Urls {
-        &self.urls
-    }
-
-    async fn prelogin(&self, email: &str) -> StdResult<Prelogin, RequestResponseError> {
-        self.client
-            .request(
-                Method::POST,
-                format!("{}/accounts/prelogin", self.urls.base),
-            )
-            .json(&json!({ "email": email }))
-            .send()
-            .await?
-            .parse()
-            .await
-    }
-
-    pub async fn login<TCache: Cache>(
-        self,
-        data: &LoginData,
-        cache: TCache,
-    ) -> Result<Client<TCache>, TCache::Error> {
-        let Prelogin {
-            kdf_type,
-            kdf_iterations,
-        } = self.prelogin(&data.email).await?;
-        let source_key =
-            crypto::SourceKey::new(&data.email, &data.password, kdf_type, kdf_iterations);
-        let master_password_hash =
-            crypto::MasterPasswordHash::new(&source_key, &data.password, kdf_type);
-
-        let mut req = HashMap::new();
-        req.insert("grant_type", "password");
-        req.insert("username", &data.email);
-        let master_password_hash = master_password_hash.to_string();
-        req.insert("password", &master_password_hash);
-        req.insert("client_id", &data.client_id);
-        req.insert("scope", "api offline_access");
-        let device_identifier = Uuid::new_v4().to_hyphenated().to_string();
-        req.insert("DeviceIdentifier", &device_identifier);
-        if let Some(v) = &data.device_name {
-            req.insert("DeviceName", v);
-        }
-        let device_type = data.device_type.map(|v| (v as u8).to_string());
-        if let Some(v) = &device_type {
-            req.insert("DeviceType", v);
-        }
-        if let Some(v) = &data.device_push_token {
-            req.insert("DevicePushToken", v);
-        }
-        let two_factor_provider = data.device_type.map(|v| (v as u8).to_string());
-        if let Some(v) = &two_factor_provider {
-            req.insert("TwoFactorProvider", v);
-        }
-        if let Some(v) = &data.two_factor_token {
-            req.insert("TwoFactorToken", v);
-        }
-        if data.two_factor_remember {
-            req.insert("TwoFactorRemember", "1");
-        }
-
-        let token = self
-            .client
-            .request(Method::POST, self.urls.auth.clone())
-            .form(&req)
-            .send()
-            .await?
-            .parse::<TokenResponse>()
-            .await?;
-        let keys = crypto::Keys::new(&source_key, &token.key)?;
-        Ok(Client {
-            client: self.client,
-            cache,
-            urls: self.urls,
-            keys,
-            refresh_token: token.refresh_token,
-            access_token_data: Some(AccessTokenData {
-                access_token: token.access_token,
-                expiry_time: util::get_token_expiry_time(token.expires_in),
-            }),
-        })
-    }
-
-    pub async fn register(&self, data: &RegisterData) -> Result<(), RequestResponseError> {
-        let kdf_iterations = data.kdf_iterations.unwrap_or(100_000);
-        let kdf_type = data.kdf_type.unwrap_or(crypto::KdfType::Pbkdf2Sha256);
-        let source_key =
-            crypto::SourceKey::new(&data.email, &data.password, kdf_type, kdf_iterations);
-        let master_password_hash =
-            crypto::MasterPasswordHash::new(&source_key, &data.password, kdf_type);
-        let protected_symmetric_key = crypto::generate_protected_symmetric_key(&source_key);
-
-        let req = json!({
-            "Email": data.email,
-            "MasterPasswordHash": master_password_hash,
-            "MasterPasswordHint": data.password_hint,
-            "Key": protected_symmetric_key.to_string(),
-            "Name": data.name,
-            "OrganizationUserId": data.organization_user_id,
-            "Kdf": data.kdf_type,
-            "KdfIterations": data.kdf_iterations,
-        });
-
-        self.client
-            .request(
-                Method::POST,
-                format!("{}/accounts/register", self.urls.base),
-            )
-            .json(&req)
-            .send()
-            .await?
-            .parse_empty()
-            .await?;
-        Ok(())
-    }
-}
-
 /// An access token and its expiry time.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AccessTokenData {
@@ -246,25 +103,6 @@ impl AccessTokenData {
     fn token_has_expired(&self) -> bool {
         self.expiry_time < SystemTime::now()
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenResponse {
-    access_token: String,
-    expires_in: Option<i64>,
-    token_type: String,
-    refresh_token: String,
-    scope: String,
-    #[serde(rename = "Key")]
-    key: CipherString,
-    #[serde(rename = "PrivateKey")]
-    private_key: Option<CipherString>,
-    #[serde(rename = "Kdf")]
-    kdf_type: crypto::KdfType,
-    #[serde(rename = "KdfIterations")]
-    kdf_iterations: u32,
-    #[serde(rename = "ResetMasterPassword")]
-    reset_master_password: bool,
 }
 
 /// The type of a device.
@@ -396,9 +234,4 @@ impl RegisterData {
             kdf_iterations: None,
         }
     }
-}
-
-pub trait Request<'request, 'client, TCache> {
-    type Output;
-    fn send(&'request self, client: &'client mut Client<TCache>) -> Self::Output;
 }
