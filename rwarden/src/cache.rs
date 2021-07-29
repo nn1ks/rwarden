@@ -16,6 +16,7 @@ pub use empty::EmptyCache;
 pub use json_file::{JsonFileCache, JsonFileCacheData};
 pub use memory::MemoryCache;
 
+/// A trait for storing resources offline.
 #[async_trait]
 pub trait Cache {
     type Error: Error + Send;

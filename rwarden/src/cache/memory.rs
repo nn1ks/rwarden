@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, convert::Infallible};
 use uuid::Uuid;
 
+/// A cache that keeps the data in memory.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct MemoryCache {
     pub account: Option<Account>,

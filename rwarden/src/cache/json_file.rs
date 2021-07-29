@@ -9,6 +9,7 @@ use thiserror::Error as ThisError;
 use tokio::{fs, io};
 use uuid::Uuid;
 
+/// The data of a [`JsonFileCache`].
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct JsonFileCacheData {
     pub account: Option<Account>,
@@ -40,6 +41,7 @@ pub enum Error {
     Io(#[from] io::Error),
 }
 
+/// A cache that writes the data to a JSON file.
 #[derive(Debug, Clone)]
 pub struct JsonFileCache {
     path: PathBuf,
