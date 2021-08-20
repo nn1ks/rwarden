@@ -242,6 +242,16 @@ impl<TCache> Client<TCache> {
         &self.keys
     }
 
+    /// Returns the refresh token.
+    pub fn refresh_token(&self) -> &str {
+        &self.refresh_token
+    }
+
+    /// Returns the access token and its expiry time.
+    pub fn access_token_data(&self) -> Option<&AccessTokenData> {
+        self.access_token_data.as_ref()
+    }
+
     pub(crate) async fn request<S>(
         &mut self,
         method: Method,
