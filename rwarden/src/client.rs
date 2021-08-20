@@ -1,13 +1,13 @@
 use crate::crypto::{self, CipherString, KdfType, Keys, MasterPasswordHash, SourceKey};
-use crate::util::{self, ResponseExt};
 use crate::{
-    account, cache::Cache, AccessTokenData, LoginData, RegisterData, Request, RequestResponseError,
-    Urls,
+    account, cache::Cache, util::ResponseExt, AccessTokenData, LoginData, RegisterData, Request,
+    RequestResponseError, Urls,
 };
 use reqwest::{header, IntoUrl, Method, RequestBuilder};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
@@ -22,7 +22,7 @@ struct Prelogin {
 #[derive(Debug, Deserialize)]
 struct TokenResponse {
     access_token: String,
-    expires_in: Option<i64>,
+    expires_in: u64,
     token_type: String,
     refresh_token: String,
     scope: String,
@@ -36,6 +36,17 @@ struct TokenResponse {
     kdf_iterations: u32,
     #[serde(rename = "ResetMasterPassword")]
     reset_master_password: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct LoginResponse<TCache> {
+    pub client: Client<TCache>,
+    pub access_token_data: AccessTokenData,
+    pub refresh_token: String,
+    pub key: CipherString,
+    pub private_key: Option<CipherString>,
+    pub kdf_type: KdfType,
+    pub kdf_iterations: u32,
 }
 
 /// A client used for logging in and registering users.
@@ -74,7 +85,7 @@ impl AnonymousClient {
         self,
         data: &LoginData,
         cache: TCache,
-    ) -> crate::Result<Client<TCache>, TCache::Error> {
+    ) -> crate::Result<LoginResponse<TCache>, TCache::Error> {
         let Prelogin {
             kdf_type,
             kdf_iterations,
@@ -121,16 +132,26 @@ impl AnonymousClient {
             .parse::<TokenResponse>()
             .await?;
         let keys = Keys::new(&source_key, &token.key)?;
-        Ok(Client {
+        let access_token_data = AccessTokenData {
+            access_token: token.access_token,
+            expiry_time: SystemTime::now() + Duration::from_secs(token.expires_in),
+        };
+        let client = Client {
             client: self.client,
             cache,
             urls: self.urls,
             keys,
+            refresh_token: token.refresh_token.clone(),
+            access_token_data: Some(access_token_data.clone()),
+        };
+        Ok(LoginResponse {
+            client,
+            access_token_data,
             refresh_token: token.refresh_token,
-            access_token_data: Some(AccessTokenData {
-                access_token: token.access_token,
-                expiry_time: util::get_token_expiry_time(token.expires_in),
-            }),
+            key: token.key,
+            private_key: token.private_key,
+            kdf_type: token.kdf_type,
+            kdf_iterations: token.kdf_iterations,
         })
     }
 
@@ -261,7 +282,7 @@ impl<TCache> Client<TCache> {
         self.refresh_token = token.refresh_token;
         self.access_token_data = Some(AccessTokenData {
             access_token: token.access_token,
-            expiry_time: util::get_token_expiry_time(token.expires_in),
+            expiry_time: SystemTime::now() + Duration::from_secs(token.expires_in),
         });
         Ok(())
     }

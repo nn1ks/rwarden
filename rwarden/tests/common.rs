@@ -26,7 +26,8 @@ pub fn login_data() -> LoginData {
 }
 
 pub async fn login() -> rwarden::Result<Client<EmptyCache>, <EmptyCache as Cache>::Error> {
-    client().login(&login_data(), EmptyCache).await
+    let response = client().login(&login_data(), EmptyCache).await?;
+    Ok(response.client)
 }
 
 pub async fn create_default_cipher<TCache: Cache + Send>(
