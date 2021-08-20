@@ -1,7 +1,7 @@
 [package]
 name = "rwarden"
 description = "Bitwarden API client"
-version = "0.0.0"
+version = "0.0.1"
 authors = ["Niklas Sauter <niklas@n1ks.net>"]
 edition = "2018"
 repository = "https://github.com/nn1ks/rwarden"
@@ -17,7 +17,7 @@ chrono = { version = "0.4.19", features = ["serde"] }
 derive_setters = "0.1.5"
 futures = "0.3.16"
 reqwest = { version = "0.11.4", features = ["json"] }
-rwarden_crypto = { path = "../rwarden_crypto" }
+rwarden_crypto = { path = "../rwarden_crypto", version = "0.0.1" }
 serde = { version = "1.0.127", features = ["derive"] }
 serde_json = "1.0.66"
 serde_repr = "0.1.7"
