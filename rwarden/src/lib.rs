@@ -7,7 +7,7 @@ use std::{result::Result as StdResult, time::SystemTime};
 use url::Url;
 use uuid::Uuid;
 
-pub use client::{AnonymousClient, Client, ClientBuilder};
+pub use client::{AnonymousClient, Client, ClientBuilder, LoginResponse};
 pub use error::{Error, RequestResponseError};
 pub use rwarden_crypto as crypto;
 
