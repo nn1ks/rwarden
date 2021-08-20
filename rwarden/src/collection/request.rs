@@ -163,7 +163,7 @@ impl Modify {
                 (collection.organization_id,),
                 (collection.id,),
                 (collection.name,),
-                (Some(collection.external_id),),
+                (collection.external_id,),
                 (),
             ),
             _phantom: (),

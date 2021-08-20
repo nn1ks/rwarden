@@ -45,7 +45,7 @@ pub struct Collection {
     pub id: Uuid,
     pub organization_id: Uuid,
     pub name: CipherString,
-    pub external_id: Uuid,
+    pub external_id: Option<Uuid>,
 }
 
 /// A collection resource with additional information.
