@@ -66,7 +66,7 @@ impl Urls {
     ///
     /// | Field    | URL                              |
     /// |----------|----------------------------------|
-    /// | [`base`] | *\<url\>*/api/                   |
+    /// | [`base`] | *\<url\>*/api                    |
     /// | [`auth`] | *\<url\>*/identity/connect/token |
     ///
     /// [`base`]: Self::base
@@ -79,7 +79,7 @@ impl Urls {
     /// # use url::Url;
     /// # fn main() -> Result<(), url::ParseError> {
     /// let urls = Urls::custom("https://example.com")?;
-    /// assert_eq!(urls.base, Url::parse("https://example.com/api/").unwrap());
+    /// assert_eq!(urls.base, Url::parse("https://example.com/api").unwrap());
     /// assert_eq!(urls.auth, Url::parse("https://example.com/identity/connect/token").unwrap());
     /// # Ok(())
     /// # }
@@ -87,7 +87,7 @@ impl Urls {
     pub fn custom<S: AsRef<str>>(url: S) -> StdResult<Self, url::ParseError> {
         let url = Url::parse(url.as_ref())?;
         Ok(Self {
-            base: url.join("api/")?,
+            base: url.join("api")?,
             auth: url.join("identity/connect/token")?,
         })
     }
