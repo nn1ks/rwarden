@@ -4,7 +4,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use thiserror::Error as ThisError;
 use tokio::{fs, io};
 use uuid::Uuid;
@@ -53,11 +54,28 @@ impl JsonFileCache {
         Self { path: path.into() }
     }
 
+    /// Returns the path of the JSON file.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Reads the JSON file and returns the cache data.
     pub async fn read_data(&self) -> Result<JsonFileCacheData, Error> {
         let bytes = fs::read(&self.path).await?;
         Ok(serde_json::from_slice(&bytes)?)
     }
 
+    /// Reads the JSON file and returns the cache data if the file exists, else returns the default
+    /// cache data.
+    pub async fn read_data_or_default(&self) -> Result<JsonFileCacheData, Error> {
+        if self.path.exists() {
+            self.read_data().await
+        } else {
+            Ok(JsonFileCacheData::default())
+        }
+    }
+
+    /// Writes the cache data to the JSON file.
     pub async fn write_data(&self, data: &JsonFileCacheData) -> Result<(), Error> {
         let value = serde_json::to_vec(&data)?;
         fs::write(&self.path, &value).await?;
@@ -68,7 +86,7 @@ impl JsonFileCache {
     where
         F: FnOnce(&mut JsonFileCacheData),
     {
-        let mut data = self.read_data().await?;
+        let mut data = self.read_data_or_default().await?;
         f(&mut data);
         self.write_data(&data).await?;
         Ok(())
