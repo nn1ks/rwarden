@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use std::error::Error;
 use uuid::Uuid;
 
-mod empty;
-mod json_file;
-mod memory;
+pub mod empty;
+pub mod json_file;
+pub mod memory;
 
 pub use empty::EmptyCache;
 pub use json_file::{JsonFileCache, JsonFileCacheData};
