@@ -2,6 +2,7 @@
 #![warn(rust_2018_idioms, missing_debug_implementations)]
 
 use derive_setters::Setters;
+use serde::{Deserialize, Serialize};
 use serde_repr::Serialize_repr as SerializeRepr;
 use std::{result::Result as StdResult, time::SystemTime};
 use url::Url;
@@ -35,7 +36,7 @@ pub trait Request<'request, 'client, TCache> {
 }
 
 /// Struct for specifying the URLs of API endpoints.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct Urls {
     pub base: Url,
     pub auth: Url,
