@@ -17,7 +17,7 @@ struct InnerError {
     validation_errors: Option<HashMap<String, Vec<String>>>,
     error_model: Option<InnerErrorModel>,
     #[serde(rename = "TwoFactorProviders2")]
-    two_factor_providers: Option<ErrorTwoFactorProviderMap>,
+    two_factor_providers: Option<TwoFactorProviderMap>,
 }
 
 impl From<InnerError> for Error {
@@ -44,7 +44,7 @@ pub enum Error {
     /// Two factor authentication is required.
     #[error("Two factor authentication is required")]
     TwoFactorRequired {
-        two_factor_providers: Vec<ErrorTwoFactorProvider>,
+        two_factor_providers: Vec<TwoFactorProvider>,
     },
     /// An unknown error occurred.
     #[error("Unknown error: {}", .message)]
@@ -56,7 +56,7 @@ pub enum Error {
 
 /// Provider for two factor authentication.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ErrorTwoFactorProvider {
+pub enum TwoFactorProvider {
     Authenticator,
     Email {
         email: String,
@@ -74,28 +74,28 @@ pub enum ErrorTwoFactorProvider {
     WebAuthn,
 }
 
-impl From<&ErrorTwoFactorProvider> for crate::TwoFactorProvider {
-    fn from(value: &ErrorTwoFactorProvider) -> Self {
+impl From<&TwoFactorProvider> for crate::TwoFactorProvider {
+    fn from(value: &TwoFactorProvider) -> Self {
         match value {
-            ErrorTwoFactorProvider::Authenticator => Self::Authenticator,
-            ErrorTwoFactorProvider::Email { .. } => Self::Email,
-            ErrorTwoFactorProvider::Duo { .. } => Self::Duo,
-            ErrorTwoFactorProvider::YubiKey { .. } => Self::YubiKey,
-            ErrorTwoFactorProvider::U2f { .. } => Self::U2f,
-            ErrorTwoFactorProvider::WebAuthn => Self::WebAuthn,
+            TwoFactorProvider::Authenticator => Self::Authenticator,
+            TwoFactorProvider::Email { .. } => Self::Email,
+            TwoFactorProvider::Duo { .. } => Self::Duo,
+            TwoFactorProvider::YubiKey { .. } => Self::YubiKey,
+            TwoFactorProvider::U2f { .. } => Self::U2f,
+            TwoFactorProvider::WebAuthn => Self::WebAuthn,
         }
     }
 }
 
-impl From<ErrorTwoFactorProvider> for crate::TwoFactorProvider {
-    fn from(value: ErrorTwoFactorProvider) -> Self {
+impl From<TwoFactorProvider> for crate::TwoFactorProvider {
+    fn from(value: TwoFactorProvider) -> Self {
         Self::from(&value)
     }
 }
 
-struct ErrorTwoFactorProviderMap(Vec<ErrorTwoFactorProvider>);
+struct TwoFactorProviderMap(Vec<TwoFactorProvider>);
 
-impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
+impl<'de> Deserialize<'de> for TwoFactorProviderMap {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -103,7 +103,7 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
         struct Visitor;
 
         impl<'de> de::Visitor<'de> for Visitor {
-            type Value = ErrorTwoFactorProviderMap;
+            type Value = TwoFactorProviderMap;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> std::fmt::Result {
                 formatter.write_str("two factor provider map")
@@ -118,7 +118,7 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
                     let provider = match key {
                         "0" => {
                             let _value = map.next_value::<serde_json::Value>()?;
-                            ErrorTwoFactorProvider::Authenticator
+                            TwoFactorProvider::Authenticator
                         }
                         "1" => {
                             #[derive(Deserialize)]
@@ -127,7 +127,7 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
                                 email: String,
                             }
                             let value = map.next_value::<Response>()?;
-                            ErrorTwoFactorProvider::Email { email: value.email }
+                            TwoFactorProvider::Email { email: value.email }
                         }
                         "2" => {
                             #[derive(Deserialize)]
@@ -137,7 +137,7 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
                                 signature: String,
                             }
                             let value = map.next_value::<Response>()?;
-                            ErrorTwoFactorProvider::Duo {
+                            TwoFactorProvider::Duo {
                                 host: value.host,
                                 signature: value.signature,
                             }
@@ -149,7 +149,7 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
                                 nfc: bool,
                             }
                             let value = map.next_value::<Response>()?;
-                            ErrorTwoFactorProvider::YubiKey { nfc: value.nfc }
+                            TwoFactorProvider::YubiKey { nfc: value.nfc }
                         }
                         "4" => {
                             #[derive(Deserialize)]
@@ -158,11 +158,11 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
                                 challenges: Vec<ErrorTwoFactorProviderU2fChallenge>,
                             }
                             let value = map.next_value::<Response>()?;
-                            ErrorTwoFactorProvider::U2f {
+                            TwoFactorProvider::U2f {
                                 challenges: value.challenges,
                             }
                         }
-                        "7" => ErrorTwoFactorProvider::WebAuthn,
+                        "7" => TwoFactorProvider::WebAuthn,
                         _ => {
                             return Err(de::Error::invalid_value(
                                 de::Unexpected::Str(key),
@@ -172,7 +172,7 @@ impl<'de> Deserialize<'de> for ErrorTwoFactorProviderMap {
                     };
                     providers.push(provider);
                 }
-                Ok(ErrorTwoFactorProviderMap(providers))
+                Ok(TwoFactorProviderMap(providers))
             }
         }
 
