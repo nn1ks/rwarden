@@ -69,7 +69,7 @@ pub enum TwoFactorProvider {
         nfc: bool,
     },
     U2f {
-        challenges: Vec<ErrorTwoFactorProviderU2fChallenge>,
+        challenges: Vec<U2fChallenge>,
     },
     WebAuthn,
 }
@@ -155,7 +155,7 @@ impl<'de> Deserialize<'de> for TwoFactorProviderMap {
                             #[derive(Deserialize)]
                             #[serde(rename_all = "PascalCase")]
                             struct Response {
-                                challenges: Vec<ErrorTwoFactorProviderU2fChallenge>,
+                                challenges: Vec<U2fChallenge>,
                             }
                             let value = map.next_value::<Response>()?;
                             TwoFactorProvider::U2f {
@@ -180,10 +180,10 @@ impl<'de> Deserialize<'de> for TwoFactorProviderMap {
     }
 }
 
-/// Challenge of U2f two factor authentication.
+/// U2F challenge.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ErrorTwoFactorProviderU2fChallenge {
+pub struct U2fChallenge {
     pub app_id: String,
     pub challenge: String,
     pub version: String,
