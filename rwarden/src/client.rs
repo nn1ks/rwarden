@@ -113,7 +113,7 @@ impl AnonymousClient {
         if let Some(v) = &data.device_push_token {
             req.insert("DevicePushToken", v);
         }
-        let two_factor_provider = data.device_type.map(|v| (v as u8).to_string());
+        let two_factor_provider = data.two_factor_provider.map(|v| (v as u8).to_string());
         if let Some(v) = &two_factor_provider {
             req.insert("TwoFactorProvider", v);
         }
