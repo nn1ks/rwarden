@@ -3,7 +3,9 @@
 use rwarden::cache::{Cache, EmptyCache};
 use rwarden::cipher::{self, Cipher};
 use rwarden::folder::{self, Folder};
-use rwarden::{crypto::CipherString, AnonymousClient, Client, DeviceType, LoginData, Urls};
+use rwarden::{
+    crypto::CipherString, AnonymousClient, Client, DeviceType, LoginData, LoginError, Urls,
+};
 use url::Url;
 
 pub const BASE_URL: &str = env!("RWARDEN_BASE_URL");
@@ -25,7 +27,7 @@ pub fn login_data() -> LoginData {
         .with_device_type(DeviceType::LinuxDesktop)
 }
 
-pub async fn login() -> rwarden::Result<Client<EmptyCache>, <EmptyCache as Cache>::Error> {
+pub async fn login() -> Result<Client<EmptyCache>, LoginError> {
     let response = client().login(&login_data(), EmptyCache).await?;
     Ok(response.client)
 }

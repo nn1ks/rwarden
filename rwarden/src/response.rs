@@ -12,7 +12,7 @@ struct InnerErrorModel {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct InnerError {
+pub(crate) struct InnerError {
     message: Option<String>,
     validation_errors: Option<HashMap<String, Vec<String>>>,
     error_model: Option<InnerErrorModel>,
@@ -20,14 +20,15 @@ struct InnerError {
     two_factor_providers: Option<TwoFactorProviderMap>,
 }
 
+impl InnerError {
+    pub(crate) fn two_factor_providers(&self) -> Option<Vec<TwoFactorProvider>> {
+        self.two_factor_providers.clone().map(|v| v.0)
+    }
+}
+
 impl From<InnerError> for Error {
     fn from(value: InnerError) -> Self {
-        if let Some(two_factor_providers) = value.two_factor_providers {
-            return Self::TwoFactorRequired {
-                two_factor_providers: two_factor_providers.0,
-            };
-        }
-        Self::Other {
+        Self {
             message: match value.error_model {
                 Some(v) if !v.message.is_empty() => v.message,
                 _ => value.message.unwrap_or_default(),
@@ -40,37 +41,20 @@ impl From<InnerError> for Error {
 /// An error returned from the Bitwarden API.
 #[derive(Debug, Clone, PartialEq, Eq, Error, Deserialize)]
 #[serde(from = "InnerError")]
-pub enum Error {
-    /// Two factor authentication is required.
-    #[error("Two factor authentication is required")]
-    TwoFactorRequired {
-        two_factor_providers: Vec<TwoFactorProvider>,
-    },
-    /// An unknown error occurred.
-    #[error("Unknown error: {}", .message)]
-    Other {
-        message: String,
-        validation_errors: HashMap<String, Vec<String>>,
-    },
+#[error("{}", .message)]
+pub struct Error {
+    message: String,
+    validation_errors: HashMap<String, Vec<String>>,
 }
 
 /// Provider for two factor authentication.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TwoFactorProvider {
     Authenticator,
-    Email {
-        email: String,
-    },
-    Duo {
-        host: String,
-        signature: String,
-    },
-    YubiKey {
-        nfc: bool,
-    },
-    U2f {
-        challenges: Vec<U2fChallenge>,
-    },
+    Email { email: String },
+    Duo { host: String, signature: String },
+    YubiKey { nfc: bool },
+    U2f { challenges: Vec<U2fChallenge> },
     WebAuthn,
 }
 
@@ -93,6 +77,7 @@ impl From<TwoFactorProvider> for crate::TwoFactorProvider {
     }
 }
 
+#[derive(Clone)]
 struct TwoFactorProviderMap(Vec<TwoFactorProvider>);
 
 impl<'de> Deserialize<'de> for TwoFactorProviderMap {

@@ -8,7 +8,7 @@ use url::Url;
 use uuid::Uuid;
 
 pub use client::{AnonymousClient, Client, ClientBuilder, LoginResponse};
-pub use error::{Error, RequestResponseError};
+pub use error::{Error, LoginError, RequestResponseError};
 pub use rwarden_crypto as crypto;
 
 #[macro_use]

@@ -2,7 +2,7 @@ use crate::{crypto, response};
 use std::{error::Error as StdError, fmt};
 use thiserror::Error as ThisError;
 
-/// Errors that can occur while interacting with the Bitwarden API.
+/// Error that can occur while interacting with the Bitwarden API.
 #[derive(Debug)]
 pub enum Error<TCacheError> {
     /// Failed to send request.
@@ -53,6 +53,25 @@ impl<TCacheError> From<response::Error> for Error<TCacheError> {
     fn from(error: response::Error) -> Self {
         Self::Response(error)
     }
+}
+
+/// Error that can occur when logging in.
+#[derive(Debug, ThisError)]
+pub enum LoginError {
+    /// Request error.
+    #[error("request error")]
+    Request(#[from] reqwest::Error),
+    /// Failed to decrypt cipher string.
+    #[error("failed to decrypt cipher string")]
+    CipherDecryption(#[from] crypto::CipherDecryptionError),
+    /// Server returned an error.
+    #[error("server returned an error")]
+    Response(#[from] response::Error),
+    /// Two factor authentication is required.
+    #[error("two factor authentication is required")]
+    TwoFactorRequired {
+        two_factor_providers: Vec<response::TwoFactorProvider>,
+    },
 }
 
 /// Error type for requests and server responses.

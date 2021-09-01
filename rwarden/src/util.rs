@@ -1,4 +1,4 @@
-use crate::{response, RequestResponseError};
+use crate::{response, LoginError, RequestResponseError};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
@@ -15,6 +15,7 @@ where
 pub trait ResponseExt {
     async fn parse<T: DeserializeOwned>(self) -> Result<T, RequestResponseError>;
     async fn parse_empty(self) -> Result<(), RequestResponseError>;
+    async fn parse_with_login_result<T: DeserializeOwned>(self) -> Result<T, LoginError>;
 }
 
 #[async_trait]
@@ -24,7 +25,7 @@ impl ResponseExt for reqwest::Response {
             Ok(self.json().await?)
         } else {
             let e = self.json::<response::Error>().await?;
-            return Err(e.into());
+            Err(e.into())
         }
     }
 
@@ -33,7 +34,21 @@ impl ResponseExt for reqwest::Response {
             Ok(())
         } else {
             let e = self.json::<response::Error>().await?;
-            return Err(e.into());
+            Err(e.into())
+        }
+    }
+
+    async fn parse_with_login_result<T: DeserializeOwned>(self) -> Result<T, LoginError> {
+        if self.status().is_success() {
+            Ok(self.json().await?)
+        } else {
+            let e = self.json::<response::InnerError>().await?;
+            Err(match e.two_factor_providers() {
+                Some(v) => LoginError::TwoFactorRequired {
+                    two_factor_providers: v,
+                },
+                None => response::Error::from(e).into(),
+            })
         }
     }
 }

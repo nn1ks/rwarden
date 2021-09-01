@@ -1,7 +1,7 @@
 use crate::crypto::{self, CipherString, KdfType, Keys, MasterPasswordHash, SourceKey};
 use crate::{
-    account, cache::Cache, util::ResponseExt, AccessTokenData, LoginData, RegisterData, Request,
-    RequestResponseError, Urls,
+    account, cache::Cache, util::ResponseExt, AccessTokenData, LoginData, LoginError, RegisterData,
+    Request, RequestResponseError, Urls,
 };
 use reqwest::{header, IntoUrl, Method, RequestBuilder};
 use serde::Deserialize;
@@ -38,6 +38,7 @@ struct TokenResponse {
     reset_master_password: bool,
 }
 
+/// Result of successful login.
 #[derive(Debug, Clone)]
 pub struct LoginResponse<TCache> {
     pub client: Client<TCache>,
@@ -68,7 +69,7 @@ impl AnonymousClient {
         &self.urls
     }
 
-    async fn prelogin(&self, email: &str) -> Result<Prelogin, RequestResponseError> {
+    async fn prelogin(&self, email: &str) -> Result<Prelogin, LoginError> {
         self.client
             .request(
                 Method::POST,
@@ -77,7 +78,7 @@ impl AnonymousClient {
             .json(&json!({ "email": email }))
             .send()
             .await?
-            .parse()
+            .parse_with_login_result()
             .await
     }
 
@@ -85,7 +86,7 @@ impl AnonymousClient {
         self,
         data: &LoginData,
         cache: TCache,
-    ) -> crate::Result<LoginResponse<TCache>, TCache::Error> {
+    ) -> Result<LoginResponse<TCache>, LoginError> {
         let Prelogin {
             kdf_type,
             kdf_iterations,
@@ -129,7 +130,7 @@ impl AnonymousClient {
             .form(&req)
             .send()
             .await?
-            .parse::<TokenResponse>()
+            .parse_with_login_result::<TokenResponse>()
             .await?;
         let keys = Keys::new(&source_key, &token.key)?;
         let access_token_data = AccessTokenData {
