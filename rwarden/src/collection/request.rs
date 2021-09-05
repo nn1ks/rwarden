@@ -174,7 +174,7 @@ impl Modify {
                 (collection.external_id,),
                 (),
             ),
-            _phantom: (),
+            phantom: (),
         }
     }
 }

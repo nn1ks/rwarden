@@ -163,7 +163,7 @@ impl Modify {
     pub fn inherit(cipher: Cipher) -> ModifyBuilder<((Uuid,), (RequestModel,))> {
         ModifyBuilder {
             fields: ((cipher.id,), (RequestModel::from(cipher),)),
-            _phantom: (),
+            phantom: (),
         }
     }
 }

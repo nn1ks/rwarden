@@ -61,7 +61,7 @@ impl ModifyDomains {
                     .map(|v| v.ty)
                     .collect(),),
             ),
-            _phantom: (),
+            phantom: (),
         }
     }
 }
