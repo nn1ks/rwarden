@@ -1,5 +1,5 @@
 use futures::stream::TryStreamExt;
-use rwarden::crypto::CipherString;
+use rwarden::crypto::SymmetricEncryptedString;
 use rwarden::folder::{self, Folder};
 
 mod common;
@@ -52,7 +52,7 @@ async fn folder_delete() {
 async fn folder_modify() {
     let mut client = common::login().await.unwrap();
     let folder = common::create_default_folder(&mut client).await.unwrap();
-    let name = CipherString::encrypt_with_keys("foo2", client.keys());
+    let name = SymmetricEncryptedString::encrypt("foo2", client.symmetric_key());
     let folder = client
         .send(&folder::Modify {
             id: folder.id,

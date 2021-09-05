@@ -4,7 +4,8 @@ use rwarden::cache::{Cache, EmptyCache};
 use rwarden::cipher::{self, Cipher};
 use rwarden::folder::{self, Folder};
 use rwarden::{
-    crypto::CipherString, AnonymousClient, Client, DeviceType, LoginData, LoginError, Urls,
+    crypto::SymmetricEncryptedString, AnonymousClient, Client, DeviceType, LoginData, LoginError,
+    Urls,
 };
 use url::Url;
 
@@ -35,11 +36,14 @@ pub async fn login() -> Result<Client<EmptyCache>, LoginError> {
 pub async fn create_default_cipher<TCache: Cache + Send>(
     client: &mut Client<TCache>,
 ) -> rwarden::Result<Cipher, TCache::Error> {
-    let name = CipherString::encrypt_with_keys("foo", client.keys());
+    let name = SymmetricEncryptedString::encrypt("foo", client.symmetric_key());
     let request_model = cipher::RequestModel::new(
         name,
         cipher::Type::Login(cipher::Login {
-            username: Some(CipherString::encrypt_with_keys("bar", client.keys())),
+            username: Some(SymmetricEncryptedString::encrypt(
+                "bar",
+                client.symmetric_key(),
+            )),
             ..Default::default()
         }),
     );
@@ -54,6 +58,6 @@ pub async fn create_default_cipher<TCache: Cache + Send>(
 pub async fn create_default_folder<TCache: Cache + Send>(
     client: &mut Client<TCache>,
 ) -> rwarden::Result<Folder, TCache::Error> {
-    let folder_name = CipherString::encrypt_with_keys("foo", client.keys());
+    let folder_name = SymmetricEncryptedString::encrypt("foo", client.symmetric_key());
     client.send(&folder::Create { name: folder_name }).await
 }

@@ -1,5 +1,6 @@
 use crate::{
-    cache::Cache, crypto::CipherString, folder::Folder, util::ResponseExt, Client, Error, Request,
+    cache::Cache, crypto::SymmetricEncryptedString, folder::Folder, util::ResponseExt, Client,
+    Error, Request,
 };
 use futures::{future::BoxFuture, stream::BoxStream};
 use reqwest::Method;
@@ -62,7 +63,7 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, TypedBuilder)]
 #[serde(rename_all = "PascalCase")]
 pub struct Create {
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
 }
 
 impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'client, TCache>
@@ -125,7 +126,7 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
 #[derive(Debug, Clone, PartialEq, Eq, Hash, TypedBuilder)]
 pub struct Modify {
     pub id: Uuid,
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
 }
 
 impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'client, TCache>

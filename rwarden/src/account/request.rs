@@ -1,4 +1,4 @@
-use crate::crypto::{CipherString, KdfType, MasterPasswordHash};
+use crate::crypto::{KdfType, MasterPasswordHash, SymmetricEncryptedBytes};
 use crate::{account::Account, cache::Cache, util::ResponseExt, Client, Error, Request};
 use futures::future::BoxFuture;
 use reqwest::Method;
@@ -82,7 +82,7 @@ pub struct ModifyEmail {
     pub new_master_password_hash: MasterPasswordHash,
     #[builder(setter(into))]
     pub token: String,
-    pub key: CipherString,
+    pub key: SymmetricEncryptedBytes,
 }
 
 impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'client, TCache>
@@ -113,7 +113,7 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
 pub struct ModifyPassword {
     pub master_password_hash: MasterPasswordHash,
     pub new_master_password_hash: MasterPasswordHash,
-    pub key: CipherString,
+    pub key: SymmetricEncryptedBytes,
 }
 
 impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'client, TCache>
@@ -146,7 +146,7 @@ pub struct ModifyKdf {
     pub kdf_iterations: u32,
     pub master_password_hash: MasterPasswordHash,
     pub new_master_password_hash: MasterPasswordHash,
-    pub key: CipherString,
+    pub key: SymmetricEncryptedBytes,
 }
 
 impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'client, TCache>

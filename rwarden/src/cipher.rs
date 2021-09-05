@@ -1,6 +1,7 @@
 //! Module for cipher resources.
 
-use crate::{crypto::CipherString, util};
+use crate::crypto::{SymmetricEncryptedBytes, SymmetricEncryptedString};
+use crate::util;
 use chrono::{DateTime, FixedOffset};
 use derive_setters::Setters;
 use serde::{de, ser::SerializeStruct, Deserialize, Deserializer, Serialize, Serializer};
@@ -29,9 +30,9 @@ pub struct Field {
     #[serde(rename = "Type")]
     pub ty: FieldType,
     /// The name of the field.
-    pub name: Option<CipherString>,
+    pub name: Option<SymmetricEncryptedString>,
     /// The value of the field.
-    pub value: Option<CipherString>,
+    pub value: Option<SymmetricEncryptedString>,
 }
 
 /// Entry in the password history.
@@ -39,7 +40,7 @@ pub struct Field {
 #[serde(rename_all = "PascalCase")]
 pub struct PasswordHistoryEntry {
     /// The password.
-    pub password: CipherString,
+    pub password: SymmetricEncryptedString,
     /// The date when the password was last used.
     pub last_used_date: Option<DateTime<FixedOffset>>,
 }
@@ -49,9 +50,9 @@ pub struct PasswordHistoryEntry {
 #[serde(rename_all = "PascalCase")]
 pub struct AttachmentRequest {
     /// The file name of the attachment.
-    pub file_name: CipherString,
+    pub file_name: SymmetricEncryptedString,
     /// The key of the attachment.
-    pub key: CipherString,
+    pub key: SymmetricEncryptedBytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Setters, Serialize)]
@@ -61,11 +62,11 @@ pub struct RequestModel {
     pub folder_id: Option<Uuid>,
     pub organization_id: Option<Uuid>,
     #[setters(skip)]
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
     #[setters(skip)]
     #[serde(flatten)]
     pub ty: Type,
-    pub notes: Option<CipherString>,
+    pub notes: Option<SymmetricEncryptedString>,
     pub fields: Vec<Field>,
     pub favorite: bool,
     pub password_history: Vec<PasswordHistoryEntry>,
@@ -74,7 +75,7 @@ pub struct RequestModel {
 }
 
 impl RequestModel {
-    pub fn new(name: CipherString, ty: Type) -> Self {
+    pub fn new(name: SymmetricEncryptedString, ty: Type) -> Self {
         Self {
             folder_id: None,
             organization_id: None,
@@ -246,11 +247,11 @@ impl<'de> Deserialize<'de> for Type {
 #[serde(rename_all = "PascalCase")]
 pub struct Login {
     /// The username of the login cipher.
-    pub username: Option<CipherString>,
+    pub username: Option<SymmetricEncryptedString>,
     /// The password of the login cipher.
-    pub password: Option<CipherString>,
+    pub password: Option<SymmetricEncryptedString>,
     /// The authenticator key for the time-based one-time password.
-    pub totp: Option<CipherString>,
+    pub totp: Option<SymmetricEncryptedString>,
     /// The URIs of the login cipher.
     #[serde(deserialize_with = "util::deserialize_optional")]
     pub uris: Vec<LoginUri>,
@@ -269,14 +270,14 @@ impl Login {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct LoginUri {
-    pub uri: CipherString,
+    pub uri: SymmetricEncryptedString,
     #[serde(rename = "Match")]
     pub match_type: LoginUriMatchType,
 }
 
 impl LoginUri {
     /// Creates a new [`LoginUri`].
-    pub fn new(uri: CipherString, match_type: LoginUriMatchType) -> Self {
+    pub fn new(uri: SymmetricEncryptedString, match_type: LoginUriMatchType) -> Self {
         Self { uri, match_type }
     }
 }
@@ -299,19 +300,19 @@ pub enum LoginUriMatchType {
 #[serde(rename_all = "PascalCase")]
 pub struct Card {
     /// The name of the cardholder.
-    pub cardholder_name: Option<CipherString>,
+    pub cardholder_name: Option<SymmetricEncryptedString>,
     /// The brand of the card.
-    pub brand: Option<CipherString>,
+    pub brand: Option<SymmetricEncryptedString>,
     /// The card number.
-    pub number: Option<CipherString>,
+    pub number: Option<SymmetricEncryptedString>,
     /// The expiration month of the card.
     #[serde(rename = "ExpMonth")]
-    pub expiration_month: Option<CipherString>,
+    pub expiration_month: Option<SymmetricEncryptedString>,
     /// The expiration year of the card.
     #[serde(rename = "ExpYear")]
-    pub expiration_year: Option<CipherString>,
+    pub expiration_year: Option<SymmetricEncryptedString>,
     /// The security code of the card.
-    pub code: Option<CipherString>,
+    pub code: Option<SymmetricEncryptedString>,
 }
 
 /// Identity cipher type.
@@ -319,24 +320,24 @@ pub struct Card {
 #[setters(strip_option, prefix = "with_")]
 #[serde(rename_all = "PascalCase")]
 pub struct Identity {
-    pub title: Option<CipherString>,
-    pub first_name: Option<CipherString>,
-    pub middle_name: Option<CipherString>,
-    pub last_name: Option<CipherString>,
-    pub address_1: Option<CipherString>,
-    pub address_2: Option<CipherString>,
-    pub address_3: Option<CipherString>,
-    pub city: Option<CipherString>,
-    pub state: Option<CipherString>,
-    pub postal_code: Option<CipherString>,
-    pub country: Option<CipherString>,
-    pub company: Option<CipherString>,
-    pub email: Option<CipherString>,
-    pub phone: Option<CipherString>,
-    pub ssn: Option<CipherString>,
-    pub username: Option<CipherString>,
-    pub passport_number: Option<CipherString>,
-    pub license_number: Option<CipherString>,
+    pub title: Option<SymmetricEncryptedString>,
+    pub first_name: Option<SymmetricEncryptedString>,
+    pub middle_name: Option<SymmetricEncryptedString>,
+    pub last_name: Option<SymmetricEncryptedString>,
+    pub address_1: Option<SymmetricEncryptedString>,
+    pub address_2: Option<SymmetricEncryptedString>,
+    pub address_3: Option<SymmetricEncryptedString>,
+    pub city: Option<SymmetricEncryptedString>,
+    pub state: Option<SymmetricEncryptedString>,
+    pub postal_code: Option<SymmetricEncryptedString>,
+    pub country: Option<SymmetricEncryptedString>,
+    pub company: Option<SymmetricEncryptedString>,
+    pub email: Option<SymmetricEncryptedString>,
+    pub phone: Option<SymmetricEncryptedString>,
+    pub ssn: Option<SymmetricEncryptedString>,
+    pub username: Option<SymmetricEncryptedString>,
+    pub passport_number: Option<SymmetricEncryptedString>,
+    pub license_number: Option<SymmetricEncryptedString>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -358,8 +359,8 @@ enum SecureNoteType {
 pub struct Attachment {
     pub id: Uuid,
     pub url: String,
-    pub file_name: CipherString,
-    pub key: CipherString,
+    pub file_name: SymmetricEncryptedString,
+    pub key: SymmetricEncryptedBytes,
     pub size: String,
     pub size_name: String,
 }
@@ -373,10 +374,10 @@ pub struct Cipher {
     pub id: Uuid,
     pub folder_id: Option<Uuid>,
     pub organization_id: Option<Uuid>,
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
     #[serde(flatten)]
     pub ty: Type,
-    pub notes: Option<CipherString>,
+    pub notes: Option<SymmetricEncryptedString>,
     #[serde(deserialize_with = "util::deserialize_optional")]
     pub fields: Vec<Field>,
     #[serde(deserialize_with = "util::deserialize_optional")]

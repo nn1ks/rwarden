@@ -1,6 +1,6 @@
 //! Module for folder resources.
 
-use crate::crypto::CipherString;
+use crate::crypto::SymmetricEncryptedString;
 use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -17,6 +17,6 @@ mod request;
 #[serde(rename_all = "PascalCase")]
 pub struct Folder {
     pub id: Uuid,
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
     pub revision_date: DateTime<FixedOffset>,
 }

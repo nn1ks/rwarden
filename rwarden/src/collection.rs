@@ -1,6 +1,6 @@
 //! Module for collection resources.
 
-use crate::crypto::CipherString;
+use crate::crypto::SymmetricEncryptedString;
 use derive_setters::Setters;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -44,7 +44,7 @@ impl SelectionReadOnlyRequestModel {
 pub struct Collection {
     pub id: Uuid,
     pub organization_id: Uuid,
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
     pub external_id: Option<Uuid>,
 }
 

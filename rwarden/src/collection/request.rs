@@ -1,7 +1,9 @@
 use crate::collection::{
     Collection, CollectionDetails, CollectionGroupDetails, SelectionReadOnlyRequestModel, Users,
 };
-use crate::{cache::Cache, crypto::CipherString, util::ResponseExt, Client, Error, Request};
+use crate::{
+    cache::Cache, crypto::SymmetricEncryptedString, util::ResponseExt, Client, Error, Request,
+};
 use futures::{future::BoxFuture, stream::BoxStream};
 use reqwest::Method;
 use serde_json::json;
@@ -67,7 +69,7 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
 #[derive(Debug, Clone, PartialEq, Eq, Hash, TypedBuilder)]
 pub struct Create {
     pub organization_id: Uuid,
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
     #[builder(default, setter(strip_option))]
     pub external_id: Option<Uuid>,
     #[builder(default, setter(strip_option))]
@@ -146,7 +148,7 @@ impl<'request, 'client: 'request, TCache: Cache + Send> Request<'request, 'clien
 pub struct Modify {
     pub organization_id: Uuid,
     pub collection_id: Uuid,
-    pub name: CipherString,
+    pub name: SymmetricEncryptedString,
     #[builder(default, setter(strip_option))]
     pub external_id: Option<Uuid>,
     #[builder(default, setter(strip_option))]
@@ -157,7 +159,13 @@ impl Modify {
     #[allow(clippy::type_complexity)]
     pub fn inherit(
         collection: Collection,
-    ) -> ModifyBuilder<((Uuid,), (Uuid,), (CipherString,), (Option<Uuid>,), ())> {
+    ) -> ModifyBuilder<(
+        (Uuid,),
+        (Uuid,),
+        (SymmetricEncryptedString,),
+        (Option<Uuid>,),
+        (),
+    )> {
         ModifyBuilder {
             fields: (
                 (collection.organization_id,),

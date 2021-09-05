@@ -4,9 +4,9 @@ use hmac::Hmac;
 use pbkdf2::pbkdf2;
 use sha2::Sha256;
 
-/// An intermediate type used for creating [`Keys`] and [`MasterPasswordHash`].
+/// An intermediate type used for creating a [`SymmetricKey`] and [`MasterPasswordHash`].
 ///
-/// [`Keys`]: crate::Keys
+/// [`SymmetricKey`]: crate::SymmetricKey
 /// [`MasterPasswordHash`]: crate::MasterPasswordHash
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SourceKey(pub [u8; 32]);

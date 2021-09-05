@@ -1,4 +1,6 @@
-use crate::crypto::{self, CipherString, KdfType, Keys, MasterPasswordHash, SourceKey};
+use crate::crypto::{
+    self, KdfType, MasterPasswordHash, SourceKey, SymmetricEncryptedBytes, SymmetricKey,
+};
 use crate::{
     account, cache::Cache, util::ResponseExt, AccessTokenData, LoginData, LoginError, RegisterData,
     Request, RequestResponseError, Urls,
@@ -27,9 +29,9 @@ struct TokenResponse {
     refresh_token: String,
     scope: String,
     #[serde(rename = "Key")]
-    key: CipherString,
+    key: SymmetricEncryptedBytes,
     #[serde(rename = "PrivateKey")]
-    private_key: Option<CipherString>,
+    private_key: Option<SymmetricEncryptedBytes>,
     #[serde(rename = "Kdf")]
     kdf_type: KdfType,
     #[serde(rename = "KdfIterations")]
@@ -44,8 +46,8 @@ pub struct LoginResponse<TCache> {
     pub client: Client<TCache>,
     pub access_token_data: AccessTokenData,
     pub refresh_token: String,
-    pub key: CipherString,
-    pub private_key: Option<CipherString>,
+    pub key: SymmetricEncryptedBytes,
+    pub private_key: Option<SymmetricEncryptedBytes>,
     pub kdf_type: KdfType,
     pub kdf_iterations: u32,
 }
@@ -132,7 +134,7 @@ impl AnonymousClient {
             .await?
             .parse_with_login_result::<TokenResponse>()
             .await?;
-        let keys = Keys::new(&source_key, &token.key)?;
+        let symmetric_key = SymmetricKey::new(&source_key, &token.key)?;
         let access_token_data = AccessTokenData {
             access_token: token.access_token,
             expiry_time: SystemTime::now() + Duration::from_secs(token.expires_in),
@@ -141,7 +143,7 @@ impl AnonymousClient {
             client: self.client,
             cache,
             urls: self.urls,
-            keys,
+            symmetric_key,
             refresh_token: token.refresh_token.clone(),
             access_token_data: Some(access_token_data.clone()),
         };
@@ -201,7 +203,7 @@ impl AnonymousClient {
 /// let client = Client::builder()
 ///     .cache(EmptyCache)
 ///     .urls(Urls::official())
-///     .keys(keys)
+///     .symmetric_key(symmetric_key)
 ///     .refresh_token("foo")
 ///     .access_token_data(AccessTokenData { // optional
 ///         access_token: "bar".to_owned(),
@@ -215,7 +217,7 @@ pub struct Client<TCache> {
     pub(crate) client: reqwest::Client,
     pub(crate) cache: TCache,
     pub(crate) urls: Urls,
-    pub(crate) keys: Keys,
+    pub(crate) symmetric_key: SymmetricKey,
     #[builder(setter(into))]
     pub(crate) refresh_token: String,
     #[builder(default, setter(strip_option))]
@@ -238,9 +240,9 @@ impl<TCache> Client<TCache> {
         &self.urls
     }
 
-    /// Returns the keys.
-    pub fn keys(&self) -> &Keys {
-        &self.keys
+    /// Returns the symmetric key.
+    pub fn symmetric_key(&self) -> &SymmetricKey {
+        &self.symmetric_key
     }
 
     /// Returns the refresh token.

@@ -2,7 +2,7 @@ mod common;
 
 use futures::stream::TryStreamExt;
 use rwarden::cipher::{self, Cipher, CipherDetails, Field, FieldType, RequestModel};
-use rwarden::crypto::{CipherString, KdfType, MasterPasswordHash, SourceKey};
+use rwarden::crypto::{KdfType, MasterPasswordHash, SourceKey, SymmetricEncryptedString};
 
 fn assert_eq_cipher_except_revision_date(a: &Cipher, b: &Cipher) {
     let Cipher {
@@ -143,25 +143,24 @@ async fn cipher_modify_complete() {
     let mut client = common::login().await.unwrap();
     let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
     let folder = common::create_default_folder(&mut client).await.unwrap();
-    let name = CipherString::encrypt_with_keys("foo2", client.keys());
+    let name = SymmetricEncryptedString::encrypt("foo2", client.symmetric_key());
     let ty = created_cipher.ty;
-    let notes = CipherString::encrypt_with_keys("notes...", client.keys());
+    let notes = SymmetricEncryptedString::encrypt("notes...", client.symmetric_key());
+    let create_field = |ty, name, value| Field {
+        ty,
+        name: Some(SymmetricEncryptedString::encrypt(
+            name,
+            client.symmetric_key(),
+        )),
+        value: Some(SymmetricEncryptedString::encrypt(
+            value,
+            client.symmetric_key(),
+        )),
+    };
     let fields = vec![
-        Field {
-            ty: FieldType::Text,
-            name: Some(CipherString::encrypt_with_keys("field1", client.keys())),
-            value: Some(CipherString::encrypt_with_keys("value1", client.keys())),
-        },
-        Field {
-            ty: FieldType::Hidden,
-            name: Some(CipherString::encrypt_with_keys("field2", client.keys())),
-            value: Some(CipherString::encrypt_with_keys("value2", client.keys())),
-        },
-        Field {
-            ty: FieldType::Boolean,
-            name: Some(CipherString::encrypt_with_keys("field3", client.keys())),
-            value: Some(CipherString::encrypt_with_keys("true", client.keys())),
-        },
+        create_field(FieldType::Text, "field1", "value1"),
+        create_field(FieldType::Hidden, "field2", "value2"),
+        create_field(FieldType::Boolean, "field3", "true"),
     ];
     let cipher = client
         .send(&cipher::Modify {
