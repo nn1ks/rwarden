@@ -1,18 +1,26 @@
 #![allow(dead_code)] // https://github.com/rust-lang/rust/issues/46379
 
-use rwarden::cache::{Cache, EmptyCache};
 use rwarden::cipher::{self, Cipher};
+use rwarden::crypto::{SymmetricEncryptedString, SymmetricKeyError};
 use rwarden::folder::{self, Folder};
 use rwarden::{
-    crypto::SymmetricEncryptedString, AnonymousClient, Client, DeviceType, LoginData, LoginError,
-    Urls,
+    cache::EmptyCache, AnonymousClient, Client, DeviceType, LoginData, LoginError, Urls,
 };
+use std::convert::Infallible;
+use thiserror::Error as ThisError;
 use url::Url;
 
 pub const BASE_URL: &str = env!("RWARDEN_BASE_URL");
 pub const AUTH_URL: &str = env!("RWARDEN_AUTH_URL");
 pub const EMAIL: &str = env!("RWARDEN_EMAIL");
 pub const PASSWORD: &str = env!("RWARDEN_PASSWORD");
+
+#[derive(Debug, ThisError)]
+#[error(transparent)]
+pub enum Error {
+    SymmetricKey(#[from] SymmetricKeyError),
+    Other(#[from] rwarden::Error<Infallible>),
+}
 
 pub fn client() -> AnonymousClient {
     let urls = Urls {
@@ -33,31 +41,25 @@ pub async fn login() -> Result<Client<EmptyCache>, LoginError> {
     Ok(response.client)
 }
 
-pub async fn create_default_cipher<TCache: Cache + Send>(
-    client: &mut Client<TCache>,
-) -> rwarden::Result<Cipher, TCache::Error> {
-    let name = SymmetricEncryptedString::encrypt("foo", client.symmetric_key());
+pub async fn create_default_cipher(client: &mut Client<EmptyCache>) -> Result<Cipher, Error> {
+    let symmetric_key = client.symmetric_key()?;
+    let name = SymmetricEncryptedString::encrypt("foo", &symmetric_key);
     let request_model = cipher::RequestModel::new(
         name,
         cipher::Type::Login(cipher::Login {
-            username: Some(SymmetricEncryptedString::encrypt(
-                "bar",
-                client.symmetric_key(),
-            )),
+            username: Some(SymmetricEncryptedString::encrypt("bar", &symmetric_key)),
             ..Default::default()
         }),
     );
-    client
+    Ok(client
         .send(&cipher::Create {
             request_model,
             owner: cipher::Owner::User,
         })
-        .await
+        .await?)
 }
 
-pub async fn create_default_folder<TCache: Cache + Send>(
-    client: &mut Client<TCache>,
-) -> rwarden::Result<Folder, TCache::Error> {
-    let folder_name = SymmetricEncryptedString::encrypt("foo", client.symmetric_key());
-    client.send(&folder::Create { name: folder_name }).await
+pub async fn create_default_folder(client: &mut Client<EmptyCache>) -> Result<Folder, Error> {
+    let folder_name = SymmetricEncryptedString::encrypt("foo", &client.symmetric_key()?);
+    Ok(client.send(&folder::Create { name: folder_name }).await?)
 }

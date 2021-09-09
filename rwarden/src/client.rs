@@ -2,10 +2,11 @@ use crate::crypto::{
     self, KdfType, MasterPasswordHash, SourceKey, SymmetricEncryptedBytes, SymmetricKey,
 };
 use crate::{
-    account, cache::Cache, util::ResponseExt, AccessTokenData, LoginData, LoginError, RegisterData,
-    Request, RequestResponseError, Urls,
+    account, cache::Cache, util::ResponseExt, AccessTokenData, LoginData, LoginError,
+    PrivateKeyError, RegisterData, Request, RequestResponseError, Urls,
 };
 use reqwest::{header, IntoUrl, Method, RequestBuilder};
+use rsa::{pkcs8::FromPrivateKey, RsaPrivateKey};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
@@ -134,7 +135,6 @@ impl AnonymousClient {
             .await?
             .parse_with_login_result::<TokenResponse>()
             .await?;
-        let symmetric_key = SymmetricKey::new(&source_key, &token.key)?;
         let access_token_data = AccessTokenData {
             access_token: token.access_token,
             expiry_time: SystemTime::now() + Duration::from_secs(token.expires_in),
@@ -143,7 +143,9 @@ impl AnonymousClient {
             client: self.client,
             cache,
             urls: self.urls,
-            symmetric_key,
+            source_key,
+            encrypted_symmetric_key: token.key.clone(),
+            encrypted_private_key: token.private_key.clone(),
             refresh_token: token.refresh_token.clone(),
             access_token_data: Some(access_token_data.clone()),
         };
@@ -196,14 +198,19 @@ impl AnonymousClient {
 ///
 /// Creating a [`Client`]:
 ///
-/// ```ignore
+/// ```no_run
 /// use rwarden::{cache::EmptyCache, AccessTokenData, Client, Urls};
 /// use std::time::SystemTime;
 ///
+/// # let source_key: rwarden::crypto::SourceKey = unimplemented!();
+/// # let encrypted_symmetric_key: rwarden::crypto::SymmetricEncryptedBytes = unimplemented!();
+/// # let encrypted_private_key: rwarden::crypto::SymmetricEncryptedBytes = unimplemented!();
 /// let client = Client::builder()
 ///     .cache(EmptyCache)
 ///     .urls(Urls::official())
-///     .symmetric_key(symmetric_key)
+///     .source_key(source_key)
+///     .encrypted_symmetric_key(encrypted_symmetric_key)
+///     .encrypted_private_key(Some(encrypted_private_key)) // optional
 ///     .refresh_token("foo")
 ///     .access_token_data(AccessTokenData { // optional
 ///         access_token: "bar".to_owned(),
@@ -214,14 +221,17 @@ impl AnonymousClient {
 #[derive(Debug, Clone, TypedBuilder)]
 pub struct Client<TCache> {
     #[builder(default, setter(skip))]
-    pub(crate) client: reqwest::Client,
-    pub(crate) cache: TCache,
-    pub(crate) urls: Urls,
-    pub(crate) symmetric_key: SymmetricKey,
+    client: reqwest::Client,
+    cache: TCache,
+    urls: Urls,
+    source_key: SourceKey,
+    encrypted_symmetric_key: SymmetricEncryptedBytes,
+    #[builder(default)]
+    encrypted_private_key: Option<SymmetricEncryptedBytes>,
     #[builder(setter(into))]
-    pub(crate) refresh_token: String,
+    refresh_token: String,
     #[builder(default, setter(strip_option))]
-    pub(crate) access_token_data: Option<AccessTokenData>,
+    access_token_data: Option<AccessTokenData>,
 }
 
 impl<TCache> Client<TCache> {
@@ -240,9 +250,34 @@ impl<TCache> Client<TCache> {
         &self.urls
     }
 
-    /// Returns the symmetric key.
-    pub fn symmetric_key(&self) -> &SymmetricKey {
-        &self.symmetric_key
+    /// Returns the source key.
+    pub fn source_key(&self) -> &SourceKey {
+        &self.source_key
+    }
+
+    /// Returns the encrypted symmetric key.
+    pub fn encrypted_symmetric_key(&self) -> &SymmetricEncryptedBytes {
+        &self.encrypted_symmetric_key
+    }
+
+    /// Decrypts and returns the symmetric key.
+    pub fn symmetric_key(&self) -> Result<SymmetricKey, crypto::SymmetricKeyError> {
+        SymmetricKey::new(&self.source_key, &self.encrypted_symmetric_key)
+    }
+
+    /// Returns the encrypted private key.
+    pub fn encrypted_private_key(&self) -> Option<&SymmetricEncryptedBytes> {
+        self.encrypted_private_key.as_ref()
+    }
+
+    /// Decrypts and returns the private key.
+    pub fn private_key(&self) -> Result<RsaPrivateKey, PrivateKeyError> {
+        let symmetric_key = self.symmetric_key()?;
+        let private_key = match &self.encrypted_private_key {
+            Some(v) => v.decrypt(&symmetric_key)?,
+            None => return Err(PrivateKeyError::NotAvailable),
+        };
+        Ok(RsaPrivateKey::from_pkcs8_der(&private_key)?)
     }
 
     /// Returns the refresh token.

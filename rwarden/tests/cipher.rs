@@ -143,19 +143,14 @@ async fn cipher_modify_complete() {
     let mut client = common::login().await.unwrap();
     let created_cipher = common::create_default_cipher(&mut client).await.unwrap();
     let folder = common::create_default_folder(&mut client).await.unwrap();
-    let name = SymmetricEncryptedString::encrypt("foo2", client.symmetric_key());
+    let symmetric_key = client.symmetric_key().unwrap();
+    let name = SymmetricEncryptedString::encrypt("foo2", &symmetric_key);
     let ty = created_cipher.ty;
-    let notes = SymmetricEncryptedString::encrypt("notes...", client.symmetric_key());
+    let notes = SymmetricEncryptedString::encrypt("notes...", &symmetric_key);
     let create_field = |ty, name, value| Field {
         ty,
-        name: Some(SymmetricEncryptedString::encrypt(
-            name,
-            client.symmetric_key(),
-        )),
-        value: Some(SymmetricEncryptedString::encrypt(
-            value,
-            client.symmetric_key(),
-        )),
+        name: Some(SymmetricEncryptedString::encrypt(name, &symmetric_key)),
+        value: Some(SymmetricEncryptedString::encrypt(value, &symmetric_key)),
     };
     let fields = vec![
         create_field(FieldType::Text, "field1", "value1"),

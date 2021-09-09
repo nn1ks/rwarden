@@ -52,7 +52,8 @@ async fn folder_delete() {
 async fn folder_modify() {
     let mut client = common::login().await.unwrap();
     let folder = common::create_default_folder(&mut client).await.unwrap();
-    let name = SymmetricEncryptedString::encrypt("foo2", client.symmetric_key());
+    let symmetric_key = client.symmetric_key().unwrap();
+    let name = SymmetricEncryptedString::encrypt("foo2", &symmetric_key);
     let folder = client
         .send(&folder::Modify {
             id: folder.id,

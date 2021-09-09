@@ -1,4 +1,5 @@
-use crate::{crypto::SymmetricKeyError, response};
+use crate::crypto::{symmetric_encryption, SymmetricKeyError};
+use crate::response;
 use std::{error::Error as StdError, fmt};
 use thiserror::Error as ThisError;
 
@@ -82,4 +83,16 @@ impl<TCacheError> From<RequestResponseError> for Error<TCacheError> {
             RequestResponseError::Response(e) => Self::Response(e),
         }
     }
+}
+
+#[derive(Debug, ThisError)]
+pub enum PrivateKeyError {
+    #[error("failed to create symmetric key")]
+    SymmetricKey(#[from] SymmetricKeyError),
+    #[error("failed to decrypt private key")]
+    Decryption(#[from] symmetric_encryption::DecryptionError),
+    #[error("failed to parse private key")]
+    Parse(#[from] rsa::pkcs8::Error),
+    #[error("private key is not available")]
+    NotAvailable,
 }
