@@ -5,10 +5,8 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub use path::{Path, PathBuf};
 pub use request::*;
 
-pub mod path;
 mod request;
 
 /// A folder resource.

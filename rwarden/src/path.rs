@@ -1,3 +1,5 @@
+//! Module for folder and collection paths.
+
 use std::{borrow::Borrow, iter::FusedIterator, ops::Deref};
 
 #[derive(Debug, Clone)]
