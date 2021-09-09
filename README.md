@@ -1,5 +1,9 @@
 # rwarden
 
+[![Crate](https://img.shields.io/crates/v/rwarden)](https://crates.io/crates/rwarden)
+[![Docs](https://img.shields.io/static/v1?label=docs&message=latest&color=yellow)](https://docs.rs/rwarden)
+[![License](https://img.shields.io/crates/l/rwarden)](https://github.com/nn1ks/rwarden#license)
+
 A Bitwarden API client for Rust.
 
 This project is not associated with the [Bitwarden](https://bitwarden.com) project nor 8bit Solutions
