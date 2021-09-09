@@ -212,10 +212,10 @@ impl AnonymousClient {
 ///     .encrypted_symmetric_key(encrypted_symmetric_key)
 ///     .encrypted_private_key(Some(encrypted_private_key)) // optional
 ///     .refresh_token("foo")
-///     .access_token_data(AccessTokenData { // optional
+///     .access_token_data(Some(AccessTokenData { // optional
 ///         access_token: "bar".to_owned(),
 ///         expiry_time: SystemTime::now(),
-///     })
+///     }))
 ///     .build();
 /// ```
 #[derive(Debug, Clone, TypedBuilder)]
@@ -230,7 +230,7 @@ pub struct Client<TCache> {
     encrypted_private_key: Option<SymmetricEncryptedBytes>,
     #[builder(setter(into))]
     refresh_token: String,
-    #[builder(default, setter(strip_option))]
+    #[builder(default)]
     access_token_data: Option<AccessTokenData>,
 }
 
