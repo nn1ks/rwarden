@@ -22,6 +22,7 @@ pub mod cache;
 pub mod cipher;
 pub mod collection;
 pub mod folder;
+pub mod organization;
 pub mod response;
 pub mod settings;
 pub mod sync;

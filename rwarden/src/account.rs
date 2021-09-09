@@ -1,6 +1,7 @@
 //! Module for account resources.
 
 use crate::crypto::SymmetricEncryptedBytes;
+use crate::organization::AccountOrganization;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -24,5 +25,5 @@ pub struct Account {
     pub key: SymmetricEncryptedBytes,
     pub private_key: Option<SymmetricEncryptedBytes>,
     pub security_stamp: String,
-    // pub organizations: Vec<Organization>, // TODO
+    pub organizations: Vec<AccountOrganization>,
 }
