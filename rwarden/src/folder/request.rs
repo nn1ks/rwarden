@@ -2,7 +2,7 @@ use crate::{
     cache::Cache, crypto::SymmetricEncryptedString, folder::Folder, util::ResponseExt, Client,
     Error, Request,
 };
-use futures::{future::BoxFuture, stream::BoxStream};
+use futures_core::{future::BoxFuture, stream::BoxStream};
 use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;

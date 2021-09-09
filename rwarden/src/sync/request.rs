@@ -1,5 +1,5 @@
 use crate::{cache::Cache, sync::Sync, util::ResponseExt, Client, Error, Request};
-use futures::future::BoxFuture;
+use futures_core::future::BoxFuture;
 use reqwest::Method;
 
 /// A [`Request`] for retrieving synchronization response.

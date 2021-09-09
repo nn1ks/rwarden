@@ -4,7 +4,7 @@ use crate::collection::{
 use crate::{
     cache::Cache, crypto::SymmetricEncryptedString, util::ResponseExt, Client, Error, Request,
 };
-use futures::{future::BoxFuture, stream::BoxStream};
+use futures_core::{future::BoxFuture, stream::BoxStream};
 use reqwest::Method;
 use serde_json::json;
 use typed_builder::TypedBuilder;

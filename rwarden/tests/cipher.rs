@@ -1,6 +1,6 @@
 mod common;
 
-use futures::stream::TryStreamExt;
+use futures_util::TryStreamExt;
 use rwarden::cipher::{self, Cipher, CipherDetails, Field, FieldType, RequestModel};
 use rwarden::crypto::{KdfType, MasterPasswordHash, SourceKey, SymmetricEncryptedString};
 

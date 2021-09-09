@@ -1,6 +1,6 @@
 use crate::settings::{Domains, EquivalentDomains, GlobalEquivalentDomainsType};
 use crate::{cache::Cache, util::ResponseExt, Client, Error, Request};
-use futures::future::BoxFuture;
+use futures_core::future::BoxFuture;
 use reqwest::Method;
 use serde::Serialize;
 use typed_builder::TypedBuilder;

@@ -1,6 +1,6 @@
 use crate::crypto::{KdfType, MasterPasswordHash, SymmetricEncryptedBytes};
 use crate::{account::Account, cache::Cache, util::ResponseExt, Client, Error, Request};
-use futures::future::BoxFuture;
+use futures_core::future::BoxFuture;
 use reqwest::Method;
 use serde::Serialize;
 use typed_builder::TypedBuilder;

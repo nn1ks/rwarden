@@ -1,7 +1,7 @@
 use crate::cipher::{Cipher, CipherDetails, Owner, RequestModel};
 use crate::util::ResponseExt;
 use crate::{cache::Cache, crypto::MasterPasswordHash, Client, Error, Request};
-use futures::{future::BoxFuture, stream::BoxStream};
+use futures_core::{future::BoxFuture, stream::BoxStream};
 use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;

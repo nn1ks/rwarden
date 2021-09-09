@@ -1,4 +1,4 @@
-use futures::stream::TryStreamExt;
+use futures_util::TryStreamExt;
 use rwarden::crypto::SymmetricEncryptedString;
 use rwarden::folder::{self, Folder};
 
