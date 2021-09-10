@@ -27,6 +27,7 @@ pub mod path;
 pub mod response;
 pub mod settings;
 pub mod sync;
+pub mod totp;
 
 /// Type alias for `Result<TOk, Error<TCacheError>>`.
 pub type Result<TOk, TCacheError> = StdResult<TOk, Error<TCacheError>>;
